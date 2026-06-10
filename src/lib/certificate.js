@@ -196,11 +196,19 @@ export function generateCertificateHTML(batch, treatedBy, categoryBreakdown) {
         <div class="header">
           <div style="margin-bottom: 12px; display: inline-block;">
             <svg width="240" height="60" viewBox="0 0 240 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M25 42C25 28 42 15 57 25C67 31 64 41 54 41C44 41 40 31 50 25" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round" />
-              <path d="M21 26C15 28 11 24 15 20C19 16 21 20 21 26Z" fill="#ef4444" />
-              <path d="M31 20C25 22 21 18 25 14C29 10 31 14 31 20Z" fill="#ef4444" />
-              <path d="M57 25C64 17 72 19 74 27C72 35 64 33 57 25Z" fill="#10b981" />
-              <path d="M57 25C62 23 67 24 74 27" stroke="#ffffff" stroke-width="1" />
+              <defs>
+                <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#10B981" />
+                  <stop offset="100%" stop-color="#06B6D4" />
+                </linearGradient>
+              </defs>
+              <path d="M30 8C42 8 50 18 50 32C50 44 42 52 30 52C18 52 10 44 10 32C10 18 18 8 30 8Z" fill="url(#logoGrad)" fill-opacity="0.12" />
+              <path d="M30 12C38 12 44 18 44 28C44 38 34 48 30 48" stroke="#10B981" stroke-width="3" stroke-linecap="round" fill="none" />
+              <path d="M30 48C22 48 16 42 16 32C16 22 26 12 30 12" stroke="#06B6D4" stroke-width="3" stroke-linecap="round" fill="none" />
+              <rect x="25" y="24" width="2" height="12" fill="#1e293b" opacity="0.6" />
+              <rect x="29" y="24" width="3.5" height="12" fill="#1e293b" opacity="0.6" />
+              <rect x="35" y="24" width="1.5" height="12" fill="#1e293b" opacity="0.6" />
+              <line x1="20" y1="30" x2="40" y2="30" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" />
               <text x="85" y="35" font-family="Georgia, serif" font-size="26" font-weight="bold" font-style="italic" fill="#1e293b">EcoTrace</text>
               <text x="85" y="50" font-family="Arial, sans-serif" font-size="10" font-weight="800" letter-spacing="3" fill="#64748b">TRACK</text>
             </svg>

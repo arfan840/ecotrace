@@ -19,20 +19,43 @@ export default function Logo({ height = 40, showText = true, className = "" }) {
       className={className}
       style={{ display: 'inline-block', verticalAlign: 'middle' }}
     >
-      {/* Brand stem - uses currentColor for adaptive dark/light rendering */}
+      <defs>
+        <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#10B981" />
+          <stop offset="100%" stopColor="#06B6D4" />
+        </linearGradient>
+      </defs>
+
+      {/* Outer soft-green leaf silhouette */}
       <path 
-        d="M25 42C25 28 42 15 57 25C67 31 64 41 54 41C44 41 40 31 50 25" 
-        stroke="currentColor" 
-        strokeWidth="2.5" 
-        strokeLinecap="round" 
+        d="M30 8C42 8 50 18 50 32C50 44 42 52 30 52C18 52 10 44 10 32C10 18 18 8 30 8Z" 
+        fill="url(#logoGrad)" 
+        fillOpacity="0.12" 
       />
-      {/* Left red leaves */}
-      <path d="M21 26C15 28 11 24 15 20C19 16 21 20 21 26Z" fill="#ef4444" />
-      <path d="M31 20C25 22 21 18 25 14C29 10 31 14 31 20Z" fill="#ef4444" />
-      
-      {/* Right green leaf */}
-      <path d="M57 25C64 17 72 19 74 27C72 35 64 33 57 25Z" fill="#10b981" />
-      <path d="M57 25C62 23 67 24 74 27" stroke="#ffffff" strokeWidth="1" />
+
+      {/* Interlocking circular eco/tracking loops */}
+      <path 
+        d="M30 12C38 12 44 18 44 28C44 38 34 48 30 48" 
+        stroke="#10B981" 
+        strokeWidth="3" 
+        strokeLinecap="round" 
+        fill="none" 
+      />
+      <path 
+        d="M30 48C22 48 16 42 16 32C16 22 26 12 30 12" 
+        stroke="#06B6D4" 
+        strokeWidth="3" 
+        strokeLinecap="round" 
+        fill="none" 
+      />
+
+      {/* Central barcode lines */}
+      <rect x="25" y="24" width="2" height="12" fill="currentColor" opacity="0.6" />
+      <rect x="29" y="24" width="3.5" height="12" fill="currentColor" opacity="0.6" />
+      <rect x="35" y="24" width="1.5" height="12" fill="currentColor" opacity="0.6" />
+
+      {/* Scanning red line */}
+      <line x1="20" y1="30" x2="40" y2="30" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" />
       
       {showText && (
         <>
