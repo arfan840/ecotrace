@@ -5,7 +5,7 @@ import Logo from './Logo';
 
 const navConfig = {
   admin: {
-    title: 'Prakriti Track — Admin',
+    title: 'EcoTrace — Admin',
     sections: [
       {
         title: 'Overview',
