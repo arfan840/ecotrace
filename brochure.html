@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>EcoTrace — Smart Biomedical Waste Tracking Brochure</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
+  <style>
+    /* Print Layout Styling */
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      line-height: 1.5;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    
+    /* Core Pages */
+    .page {
+      width: 210mm;
+      height: 297mm;
+      page-break-after: always;
+      background: #ffffff;
+      padding: 24mm 20mm;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    /* Decorative page frames */
+    .page::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 6px;
+      background: linear-gradient(90deg, #10B981, #06B6D4);
+    }
+    
+    /* Header & Footer Rules */
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 12px;
+      margin-bottom: 24px;
+    }
+    
+    .page-header-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #64748b;
+      font-weight: 700;
+    }
+    
+    .page-footer {
+      position: absolute;
+      bottom: 20mm;
+      left: 20mm;
+      right: 20mm;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: #64748b;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 10px;
+    }
+    
+    /* Cover Page (Dark Theme) */
+    .page.cover {
+      background: #0f172a;
+      background-image: radial-gradient(ellipse at 80% 20%, rgba(6, 182, 212, 0.15) 0%, transparent 60%),
+                        radial-gradient(ellipse at 20% 80%, rgba(16, 185, 129, 0.12) 0%, transparent 60%);
+      color: #ffffff;
+      justify-content: center;
+      align-items: center;
+      padding: 0 25mm;
+      text-align: center;
+    }
+    
+    .page.cover::after {
+      height: 8px;
+    }
+    
+    .cover-logo {
+      margin-bottom: 40px;
+    }
+    
+    .cover-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 2.8rem;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 20px;
+      letter-spacing: -0.02em;
+    }
+    
+    .cover-title span {
+      background: linear-gradient(135deg, #34d399, #22d3ee);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .cover-subtitle {
+      font-size: 1.25rem;
+      font-weight: 300;
+      color: #94a3b8;
+      max-width: 500px;
+      margin: 0 auto 50px;
+      line-height: 1.5;
+    }
+    
+    .cover-badge {
+      display: inline-block;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      padding: 6px 16px;
+      border-radius: 100px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 30px;
+    }
+    
+    .cover-meta {
+      position: absolute;
+      bottom: 25mm;
+      font-size: 0.8rem;
+      color: #64748b;
+      display: flex;
+      gap: 40px;
+    }
+    
+    .cover-meta-item strong {
+      color: #cbd5e1;
+    }
+    
+    /* Typography & Sections */
+    h1, h2, h3 {
+      font-family: 'Playfair Display', Georgia, serif;
+    }
+    
+    .section-title {
+      font-size: 1.8rem;
+      color: #0f172a;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+    
+    .section-desc {
+      font-size: 0.95rem;
+      color: #64748b;
+      margin-bottom: 24px;
+    }
+    
+    /* Visual Cards & Components */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    
+    .card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    
+    .card-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .card-text {
+      font-size: 0.88rem;
+      color: #475569;
+      line-height: 1.6;
+    }
+    
+    .eco-bullet {
+      list-style: none;
+      margin-top: 10px;
+    }
+    
+    .eco-bullet li {
+      position: relative;
+      padding-left: 20px;
+      margin-bottom: 6px;
+      font-size: 0.88rem;
+      color: #475569;
+    }
+    
+    .eco-bullet li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #10B981;
+      font-weight: 800;
+    }
+    
+    .cross-bullet li::before {
+      content: '✗';
+      color: #ef4444;
+    }
+    
+    /* Workflow Layout */
+    .flow-step {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    
+    .flow-num {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #10B981, #06B6D4);
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    
+    .flow-body {
+      flex: 1;
+    }
+    
+    .flow-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
+    
+    /* Technical Badges */
+    .badge-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    
+    .tech-badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      color: #475569;
+    }
+    
+    /* CTA Box */
+    .cta-box {
+      margin-top: auto;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      text-align: center;
+      position: relative;
+    }
+    
+    .cta-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    
+    .cta-text {
+      font-size: 0.88rem;
+      color: #94a3b8;
+      max-width: 480px;
+      margin: 0 auto 16px;
+    }
+    
+    .cta-button {
+      display: inline-block;
+      background: #10B981;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 0.85rem;
+      padding: 8px 20px;
+      border-radius: 50px;
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ================= PAGE 1: COVER ================= -->
+  <div class="page cover">
+    <div class="cover-logo">
+      <svg width="300" height="75" viewBox="0 0 240 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#34d399" />
+            <stop offset="100%" stop-color="#22d3ee" />
+          </linearGradient>
+        </defs>
+        <path d="M30 8C42 8 50 18 50 32C50 44 42 52 30 52C18 52 10 44 10 32C10 18 18 8 30 8Z" fill="url(#logoGrad)" fill-opacity="0.15" />
+        <path d="M30 12C38 12 44 18 44 28C44 38 34 48 30 48" stroke="#34d399" stroke-width="3" stroke-linecap="round" fill="none" />
+        <path d="M30 48C22 48 16 42 16 32C16 22 26 12 30 12" stroke="#22d3ee" stroke-width="3" stroke-linecap="round" fill="none" />
+        <rect x="25" y="24" width="2" height="12" fill="#ffffff" opacity="0.8" />
+        <rect x="29" y="24" width="3.5" height="12" fill="#ffffff" opacity="0.8" />
+        <rect x="35" y="24" width="1.5" height="12" fill="#ffffff" opacity="0.8" />
+        <line x1="20" y1="30" x2="40" y2="30" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" />
+        <text x="85" y="35" font-family="Georgia, serif" font-size="26" font-weight="bold" font-style="italic" fill="#ffffff">EcoTrace</text>
+        <text x="85" y="50" font-family="Arial, sans-serif" font-size="10" font-weight="800" letter-spacing="3" fill="#a5f3fc">TRACK</text>
+      </svg>
+    </div>
+    <div class="cover-badge">Secure Chain of Custody</div>
+    <h1 class="cover-title">Smart Biomedical<br>Waste Tracking &amp;<br><span>Compliance Platform</span></h1>
+    <p class="cover-subtitle">Automated barcode generation, integrated mobile weighing, and real-time digital auditing for modern healthcare facilities.</p>
+    
+    <div class="cover-meta">
+      <div class="cover-meta-item">Product <strong>V1.2</strong></div>
+      <div class="cover-meta-item">Focus <strong>Compliance &amp; Security</strong></div>
+      <div class="cover-meta-item">Powered by <strong>Cloud Integrations</strong></div>
+    </div>
+  </div>
+
+
+  <!-- ================= PAGE 2: PROBLEM & SOLUTION ================= -->
+  <div class="page">
+    <div class="page-header">
+      <span class="page-header-title">The Challenge &amp; Solution</span>
+      <svg width="100" height="25" viewBox="0 0 240 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M30 8C42 8 50 18 50 32C50 44 42 52 30 52C18 52 10 44 10 32C10 18 18 8 30 8Z" fill="#10B981" fill-opacity="0.12" />
+        <path d="M30 12C38 12 44 18 44 28C44 38 34 48 30 48" stroke="#10B981" stroke-width="3" stroke-linecap="round" fill="none" />
+        <path d="M30 48C22 48 16 42 16 32C16 22 26 12 30 12" stroke="#06B6D4" stroke-width="3" stroke-linecap="round" fill="none" />
+        <text x="85" y="38" font-family="Georgia, serif" font-size="24" font-weight="bold" font-style="italic" fill="#0f172a">EcoTrace</text>
+      </svg>
+    </div>
+    
+    <h2 class="section-title">Reimagining Waste Logistics</h2>
+    <p class="section-desc">Traditional biomedical waste workflows suffer from high manual overhead, compliance risks, missing data, and critical auditing delays. EcoTrace provides a modern digital alternative.</p>
+    
+    <div class="grid-2">
+      <div class="card" style="border-top: 3px solid #ef4444;">
+        <div class="card-title">⚠️ Traditional Drawbacks</div>
+        <ul class="eco-bullet cross-bullet">
+          <li>Manual ledger entries prone to errors</li>
+          <li>No GPS verification of pickup events</li>
+          <li>Difficult to detect waste leakage in transit</li>
+          <li>Compliance audits take days to reconcile</li>
+          <li>Paper receipts get damaged or lost</li>
+        </ul>
+      </div>
+      
+      <div class="card" style="border-top: 3px solid #10B981;">
+        <div class="card-title">🌿 The EcoTrace Standard</div>
+        <ul class="eco-bullet">
+          <li>Automated unique QR-barcode printing</li>
+          <li>GPS verified coordinates at check-in</li>
+          <li>Bluetooth scale integration for auto weight</li>
+          <li>Instantly reconciled transit metrics</li>
+          <li>Secure, immutable digital certificates</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="background: #f0fdf4; border-color: #bbf7d0;">
+      <div class="card-title" style="color: #166534;">🔒 Guaranteed Chain of Custody</div>
+      <p class="card-text" style="color: #1e3a1e; font-size: 0.9rem;">
+        EcoTrace enforces a strict **digital handshake** at every handover node. From the moment the healthcare facility labels a waste bag, through transit check-in, and final treatment processing, every action is timestamped, scanned, and verified. Discrepancies are flagged immediately, preventing environmental leaks and ensuring absolute regulatory alignment.
+      </p>
+    </div>
+
+    <div class="page-footer">
+      <span>EcoTrace Client Brochure</span>
+      <span>Page 2 of 4</span>
+    </div>
+  </div>
+
+
+  <!-- ================= PAGE 3: MODULES & ROLE WORKFLOWS ================= -->
+  <div class="page">
+    <div class="page-header">
+      <span class="page-header-title">Role-Based Workflows</span>
+      <svg width="100" height="25" viewBox="0 0 240 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M30 8C42 8 50 18 50 32C50 44 42 52 30 52C18 52 10 44 10 32C10 18 18 8 30 8Z" fill="#10B981" fill-opacity="0.12" />
+        <path d="M30 12C38 12 44 18 44 28C44 38 34 48 30 48" stroke="#10B981" stroke-width="3" stroke-linecap="round" fill="none" />
+        <path d="M30 48C22 48 16 42 16 32C16 22 26 12 30 12" stroke="#06B6D4" stroke-width="3" stroke-linecap="round" fill="none" />
+        <text x="85" y="38" font-family="Georgia, serif" font-size="24" font-weight="bold" font-style="italic" fill="#0f172a">EcoTrace</text>
+      </svg>
+    </div>
+    
+    <h2 class="section-title">Designed for Collaboration</h2>
+    <p class="section-desc">EcoTrace is structured into three dedicated modules, delivering targeted, high-performance interfaces for all stakeholders in the waste lifecycle.</p>
+    
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <h3 class="flow-title">🏥 Healthcare Facility Portal (HCF)</h3>
+        <p class="card-text">Hospitals generate waste bags inside the portal, print dynamic color-coded QR labels (Yellow, Red, Blue, White), review dispatch manifests, and download official disposal certificates once processing completes.</p>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <h3 class="flow-title">🚛 Driver App (Mobile Optimized)</h3>
+        <p class="card-text">A responsive web application enabling field collectors to perform GPS check-ins at facility nodes, scan QR labels with their phone cameras, record weights directly via Bluetooth scales, and sync queue data offline.</p>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <h3 class="flow-title">♻️ Common Treatment Facility Dashboard (CBWTF)</h3>
+        <p class="card-text">Plant managers log gate receipts, reconcile inbound shipments against driver route sheets, group bags into processing batches (Autoclave, Incinerate), and issue cryptographically backed disposal certificates.</p>
+      </div>
+    </div>
+
+    <div class="page-footer">
+      <span>EcoTrace Client Brochure</span>
+      <span>Page 3 of 4</span>
+    </div>
+  </div>
+
+
+  <!-- ================= PAGE 4: TECH, COMPLIANCE & CTA ================= -->
+  <div class="page">
+    <div class="page-header">
+      <span class="page-header-title">Technology &amp; Onboarding</span>
+      <svg width="100" height="25" viewBox="0 0 240 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M30 8C42 8 50 18 50 32C50 44 42 52 30 52C18 52 10 44 10 32C10 18 18 8 30 8Z" fill="#10B981" fill-opacity="0.12" />
+        <path d="M30 12C38 12 44 18 44 28C44 38 34 48 30 48" stroke="#10B981" stroke-width="3" stroke-linecap="round" fill="none" />
+        <path d="M30 48C22 48 16 42 16 32C16 22 26 12 30 12" stroke="#06B6D4" stroke-width="3" stroke-linecap="round" fill="none" />
+        <text x="85" y="38" font-family="Georgia, serif" font-size="24" font-weight="bold" font-style="italic" fill="#0f172a">EcoTrace</text>
+      </svg>
+    </div>
+    
+    <h2 class="section-title">Built for Scale &amp; Trust</h2>
+    <p class="section-desc">Leveraging modern architecture to ensure fast updates, military-grade data security, and seamless integration with existing IT infrastructure.</p>
+    
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">⚙️ Premium Tech Stack</div>
+        <p class="card-text">Developed using top-tier frameworks to offer smooth page loads and zero downtime.</p>
+        <div class="badge-grid">
+          <span class="tech-badge">React 18</span>
+          <span class="tech-badge">Vite Dev</span>
+          <span class="tech-badge">Supabase DB</span>
+          <span class="tech-badge">PostgreSQL</span>
+          <span class="tech-badge">RLS Policies</span>
+          <span class="tech-badge">JWT Auth</span>
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="card-title">📜 Regulatory Compliance</div>
+        <ul class="eco-bullet" style="margin-top: 5px;">
+          <li style="font-size: 0.82rem;">Aligned with BMW Rules 2016</li>
+          <li style="font-size: 0.82rem;">Strict 4-color categorization rules</li>
+          <li style="font-size: 0.82rem;">Fully auditable ledger reports</li>
+          <li style="font-size: 0.82rem;">Real-time GPS log trail mapping</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="cta-box">
+      <h3 class="cta-title">Upgrade Your Compliance Today</h3>
+      <p class="cta-text">Deploy EcoTrace within your facility network to eliminate waste discrepancy leaks, digitize logs, and automate regulatory reports.</p>
+      <a href="https://ecotrace.in" class="cta-button">Request a Demo</a>
+    </div>
+
+    <div class="page-footer">
+      <span>EcoTrace Client Brochure</span>
+      <span>Page 4 of 4</span>
+    </div>
+  </div>
+
+</body>
+</html>
