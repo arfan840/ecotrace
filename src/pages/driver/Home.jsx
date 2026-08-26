@@ -8,6 +8,7 @@ import { lookupBagByBarcode, updateBagStatus, fetchBagsByRoute } from '../../lib
 import { insertAuditLog } from '../../lib/api/auditLogs';
 import { queueAction } from '../../lib/offlineQueue';
 import { branding } from '../../config/branding';
+import { logError } from '../../lib/errors';
 
 export default function DriverHome() {
   const { supabase, user } = useAuth();
@@ -114,7 +115,9 @@ export default function DriverHome() {
             details: `Driver GPS Check-in: ${gpsData.lat.toFixed(6)}, ${gpsData.lng.toFixed(6)}`,
           }, user?.organization_id);
           showSuccess('📍 Location captured and logged');
-        } catch (noop) {}
+        } catch (err) {
+          logError('DriverHome.captureGPS', err);
+        }
       },
       (err) => showError(`GPS error: ${err.message}`),
       { enableHighAccuracy: true, timeout: 15000 }
@@ -145,7 +148,7 @@ export default function DriverHome() {
   };
 
   const cancelScanner = async () => {
-    try { await scannerInstanceRef.current?.stop(); } catch (_) {}
+    try { await scannerInstanceRef.current?.stop(); } catch (err) { logError('DriverHome.cancelScanner', err); }
     setScanning(false);
   };
 

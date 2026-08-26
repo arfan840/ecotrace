@@ -21,6 +21,7 @@ export default function Bags() {
   const [newBags, setNewBags] = useState([]); // just-created bags for preview
   const [form, setForm] = useState({ hospital_id: '', category: 'Yellow', quantity: 1 });
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchHospitals(supabase, user?.organization_id).then(data => {
@@ -58,6 +59,7 @@ export default function Bags() {
   const handleCreate = async (e) => {
     e.preventDefault();
     setCreating(true);
+    setError('');
     try {
       const hospital = hospitals.find(h => h.id === form.hospital_id);
       if (!hospital) throw new Error(`Please select a ${branding.nomenclature.hcf}`);
@@ -92,7 +94,7 @@ export default function Bags() {
       setNewBags(inserted || rows);
       setData(d => ({ ...d, total: d.total + qty })); // optimistic
     } catch (err) {
-      alert(err.message || 'Failed to create bags');
+      setError(err.message || 'Failed to create bags');
     } finally {
       setCreating(false);
     }
@@ -116,7 +118,7 @@ export default function Bags() {
           {selectedIds.size > 0 && (
             <PrintLabelButton bags={selectedBagsForPrint} label={`🖨️ Print ${selectedIds.size} Labels`} className="btn btn-secondary" />
           )}
-          <button className="btn btn-primary" onClick={() => { setShowCreate(true); setNewBags([]); }}>
+          <button className="btn btn-primary" onClick={() => { setShowCreate(true); setNewBags([]); setError(''); }}>
             ➕ Create Bags
           </button>
         </div>
@@ -186,12 +188,14 @@ export default function Bags() {
 
       {/* Create Bags Modal */}
       {showCreate && (
-        <div className="modal-overlay" onClick={() => { setShowCreate(false); setNewBags([]); }}>
+        <div className="modal-overlay" onClick={() => { setShowCreate(false); setNewBags([]); setError(''); }}>
           <div className="modal-content" style={{ maxWidth: 700, width: '95vw' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>➕ Create Waste Bags</h2>
-              <button className="modal-close" onClick={() => { setShowCreate(false); setNewBags([]); }}>×</button>
+              <button className="modal-close" onClick={() => { setShowCreate(false); setNewBags([]); setError(''); }}>×</button>
             </div>
+
+            {error && <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: 12, marginBottom: 16, color: '#ef4444', textAlign: 'center' }}>{error}</div>}
 
             {newBags.length === 0 ? (
               <form onSubmit={handleCreate}>

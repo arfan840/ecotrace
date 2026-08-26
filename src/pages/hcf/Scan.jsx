@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { parseQRPayload } from '../../lib/qrGenerator';
 import { isWebBluetoothSupported, connectBluetoothScale, simulateWeightFetch, disconnectActiveDevice } from '../../lib/bluetoothScale';
+import { logError } from '../../lib/errors';
 
 export default function HcfScan() {
   const { supabase, user } = useAuth();
@@ -72,7 +73,7 @@ export default function HcfScan() {
   };
 
   const stopScanner = async () => {
-    try { await scannerInstanceRef.current?.stop(); } catch (_) {}
+    try { await scannerInstanceRef.current?.stop(); } catch (err) { logError('HcfScan.stopScanner', err); }
     setScanning(false);
   };
 
@@ -164,7 +165,9 @@ export default function HcfScan() {
         const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
         gpsLat = pos.coords.latitude;
         gpsLng = pos.coords.longitude;
-      } catch (_) {}
+      } catch (err) {
+        logError('HcfScan.geolocation', err);
+      }
 
       const selectedRoute = activeRoutes.find(r => r.id === selectedRouteId);
 

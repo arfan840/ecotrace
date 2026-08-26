@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { parseQRPayload } from '../../lib/qrGenerator';
 import { isWebBluetoothSupported, connectBluetoothScale, simulateWeightFetch, disconnectActiveDevice } from '../../lib/bluetoothScale';
+import { logError } from '../../lib/errors';
 
 export default function PlantGateScan() {
   const { supabase, user } = useAuth();
@@ -13,6 +14,7 @@ export default function PlantGateScan() {
   const [scanned, setScanned] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [manualCode, setManualCode] = useState('');
   const [confirming, setConfirming] = useState(false);
   const scannerInstanceRef = useRef(null);
@@ -114,7 +116,7 @@ export default function PlantGateScan() {
   };
 
   const stopScanner = async () => {
-    try { await scannerInstanceRef.current?.stop(); } catch (_) {}
+    try { await scannerInstanceRef.current?.stop(); } catch (err) { logError('GateScan.stopScanner', err); }
     setScanning(false);
   };
 
@@ -154,7 +156,8 @@ export default function PlantGateScan() {
         details: `${scanned.length} bags received at gate (${scanMode} mode)`,
       }).then();
 
-      alert(`✅ ${scanned.length} bags marked as received!`);
+      setSuccess(`✅ ${scanned.length} bags marked as received!`);
+      setTimeout(() => setSuccess(''), 4000);
       setScanned([]);
       await stopScanner();
     } catch (err) {
@@ -193,6 +196,7 @@ export default function PlantGateScan() {
         {scanned.length > 0 && <span className="badge badge-active">{scanned.length} in session</span>}
       </div>
 
+      {success && <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: 'var(--accent-green)', fontWeight: 600, textAlign: 'center' }}>{success}</div>}
       {error && <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#ef4444' }}>{error}</div>}
 
       {verifyingBag ? (
