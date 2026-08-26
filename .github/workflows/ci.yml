@@ -30,8 +30,11 @@ jobs:
       - name: Code Quality Linting
         run: npm run lint
 
-      - name: Run Unit & Integration Tests
-        run: npm run test
+      - name: Run Unit & Integration Tests with Coverage
+        run: npm run test -- --coverage
 
       - name: Production Build Verification
         run: npm run build
+
+      - name: Security Vulnerabilities Audit
+        run: npm audit --audit-level=high
