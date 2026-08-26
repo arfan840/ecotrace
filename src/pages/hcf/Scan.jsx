@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { parseQRPayload } from '../../lib/qrGenerator';
-import { isWebBluetoothSupported, connectBluetoothScale, simulateWeightFetch, disconnectActiveDevice } from '../../lib/bluetoothScale';
 import { logError } from '../../lib/errors';
+import useQrScanner from '../../hooks/useQrScanner';
+import useBluetoothScale from '../../hooks/useBluetoothScale';
+import { isWebBluetoothSupported } from '../../lib/bluetoothScale';
 
 export default function HcfScan() {
   const { supabase, user } = useAuth();
@@ -11,18 +13,15 @@ export default function HcfScan() {
 
   const [activeRoutes, setActiveRoutes] = useState([]);
   const [selectedRouteId, setSelectedRouteId] = useState('');
-  const [scanning, setScanning] = useState(false);
   const [scannedBag, setScannedBag] = useState(null);
   const [manualCode, setManualCode] = useState('');
-  const [weight, setWeight] = useState('');
-  const [btLoading, setBtLoading] = useState(false);
-  const [btStatus, setBtStatus] = useState('');
 
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState(false);
 
-  const scannerInstanceRef = useRef(null);
+  const { scanning, startScanner, stopScanner } = useQrScanner();
+  const { weight, setWeight, btLoading, btStatus, triggerBluetoothWeigh } = useBluetoothScale();
 
   useEffect(() => {
     // Load active driver routes
@@ -33,48 +32,26 @@ export default function HcfScan() {
       .then(({ data }) => {
         if (data) setActiveRoutes(data);
       });
-
-    // Cleanup BT connection on unmount
-    return () => {
-      disconnectActiveDevice();
-    };
   }, [supabase]);
 
   const showSuccess = (msg) => { setStatus(msg); setError(''); setTimeout(() => setStatus(''), 4000); };
   const showError = (msg) => { setError(msg); setStatus(''); setTimeout(() => setError(''), 5000); };
 
-  const startScanner = async () => {
+  const handleStartScanner = async () => {
     if (!selectedRouteId) {
       showError('Please select a driver route before scanning.');
       return;
     }
     setError('');
-    setScanning(true);
     setScannedBag(null);
     try {
-      const { Html5Qrcode } = await import('html5-qrcode');
-      const scanner = new Html5Qrcode('hcf-qr-reader');
-      scannerInstanceRef.current = scanner;
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        async (decodedText) => {
-          const bagId = parseQRPayload(decodedText) || decodedText;
-          await scanner.stop();
-          setScanning(false);
-          await lookupBag(bagId);
-        },
-        () => {}
-      );
+      await startScanner('hcf-qr-reader', async (decodedText) => {
+        const bagId = parseQRPayload(decodedText) || decodedText;
+        await lookupBag(bagId);
+      });
     } catch (err) {
       showError('Camera not available. Try manual lookup.');
-      setScanning(false);
     }
-  };
-
-  const stopScanner = async () => {
-    try { await scannerInstanceRef.current?.stop(); } catch (err) { logError('HcfScan.stopScanner', err); }
-    setScanning(false);
   };
 
   const lookupBag = async (code) => {
@@ -122,29 +99,6 @@ export default function HcfScan() {
   const handleManualLookup = (e) => {
     e.preventDefault();
     if (manualCode.trim()) lookupBag(manualCode);
-  };
-
-  const triggerBluetoothWeigh = () => {
-    if (isWebBluetoothSupported()) {
-      setBtLoading(true);
-      setBtStatus('Initializing Bluetooth...');
-      connectBluetoothScale(
-        (val) => {
-          setWeight(val);
-          setBtLoading(false);
-          setBtStatus('✅ Weight received successfully!');
-        },
-        (err) => {
-          setBtLoading(false);
-          setBtStatus(`❌ Bluetooth Error: ${err.message || err}`);
-        },
-        (statusText) => {
-          setBtStatus(`📶 ${statusText}`);
-        }
-      );
-    } else {
-      setBtStatus('❌ Bluetooth not supported in this browser.');
-    }
   };
 
   const confirmDispatch = async () => {
@@ -265,7 +219,7 @@ export default function HcfScan() {
           {/* Camera Scanner Button */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '32px 24px' }}>
             <div style={{ fontSize: '3rem' }}>📷</div>
-            <button className="btn btn-primary btn-lg" onClick={startScanner} style={{ width: '100%', maxWidth: 320 }}>
+            <button className="btn btn-primary btn-lg" onClick={handleStartScanner} style={{ width: '100%', maxWidth: 320 }}>
               Open Camera & Scan QR
             </button>
           </div>
