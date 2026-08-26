@@ -1,34 +1,27 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { parseQRPayload } from '../../lib/qrGenerator';
-import { isWebBluetoothSupported, connectBluetoothScale, simulateWeightFetch, disconnectActiveDevice } from '../../lib/bluetoothScale';
-import { logError } from '../../lib/errors';
+import { isWebBluetoothSupported } from '../../lib/bluetoothScale';
+import useQrScanner from '../../hooks/useQrScanner';
+import useBluetoothScale from '../../hooks/useBluetoothScale';
 
 export default function PlantGateScan() {
   const { supabase, user } = useAuth();
   const [scanMode, setScanMode] = useState('fast'); // 'fast' or 'verified'
   const [verifyingBag, setVerifyingBag] = useState(null);
-  const [actualWeight, setActualWeight] = useState('');
-  const [btLoading, setBtLoading] = useState(false);
-  const [btStatus, setBtStatus] = useState('');
   const [scanned, setScanned] = useState([]);
-  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [manualCode, setManualCode] = useState('');
   const [confirming, setConfirming] = useState(false);
-  const scannerInstanceRef = useRef(null);
   const scannedRef = useRef([]);
   const processingRef = useRef(false);
 
+  const { scanning, startScanner, stopScanner } = useQrScanner();
+  const { weight: actualWeight, setWeight: setActualWeight, btLoading, btStatus, triggerBluetoothWeigh } = useBluetoothScale();
+
   // Sync state to ref so closure always has latest
   React.useEffect(() => { scannedRef.current = scanned; }, [scanned]);
-
-  React.useEffect(() => {
-    return () => {
-      disconnectActiveDevice();
-    };
-  }, []);
 
   const processCode = async (rawCode) => {
     if (processingRef.current) return;
@@ -64,29 +57,6 @@ export default function PlantGateScan() {
     }
   };
 
-  const triggerBluetoothWeigh = () => {
-    if (isWebBluetoothSupported()) {
-      setBtLoading(true);
-      setBtStatus('Initializing Bluetooth...');
-      connectBluetoothScale(
-        (val) => {
-          setActualWeight(val);
-          setBtLoading(false);
-          setBtStatus('✅ Weight received successfully!');
-        },
-        (err) => {
-          setBtLoading(false);
-          setBtStatus(`❌ Bluetooth Error: ${err.message || err}`);
-        },
-        (statusText) => {
-          setBtStatus(`📶 ${statusText}`);
-        }
-      );
-    } else {
-      setBtStatus('❌ Bluetooth not supported in this browser.');
-    }
-  };
-
   const confirmVerifiedBag = () => {
     if (!verifyingBag || !actualWeight) return;
     const bagWithNewWeight = { ...verifyingBag, gate_weight: parseFloat(actualWeight) };
@@ -96,28 +66,15 @@ export default function PlantGateScan() {
     setError('');
   };
 
-  const startScanner = async () => {
+  const handleStartScanner = async () => {
     setError('');
-    setScanning(true);
     try {
-      const { Html5Qrcode } = await import('html5-qrcode');
-      const scanner = new Html5Qrcode('gate-qr-reader');
-      scannerInstanceRef.current = scanner;
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        async (decodedText) => { await processCode(decodedText); },
-        () => {}
-      );
+      await startScanner('gate-qr-reader', async (decodedText) => {
+        await processCode(decodedText);
+      });
     } catch (err) {
       setError('Camera not available. Use manual entry.');
-      setScanning(false);
     }
-  };
-
-  const stopScanner = async () => {
-    try { await scannerInstanceRef.current?.stop(); } catch (err) { logError('GateScan.stopScanner', err); }
-    setScanning(false);
   };
 
   const handleManual = async (e) => {
@@ -264,7 +221,7 @@ export default function PlantGateScan() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: scanning ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
           {!scanning ? (
-            <button className="btn btn-primary btn-lg" onClick={startScanner} style={{ padding: '20px', fontSize: '1rem' }}>
+            <button className="btn btn-primary btn-lg" onClick={handleStartScanner} style={{ padding: '20px', fontSize: '1rem' }}>
               📷 Open Camera Scanner
             </button>
           ) : (
