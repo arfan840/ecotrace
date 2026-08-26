@@ -1,29 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { fetchAuditLogs } from '../../lib/api/auditLogs';
 
 export default function Audit() {
-  const { supabase } = useAuth();
+  const { supabase, user } = useAuth();
   const [data, setData] = useState({ logs: [], total: 0 });
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
     async function load() {
-      let q = supabase.from('audit_logs').select('*', { count: 'exact' }).order('created_at', { ascending: false });
-      if (search) q = q.or(`action.ilike.%${search}%,user_name.ilike.%${search}%,entity.ilike.%${search}%,details.ilike.%${search}%`);
-      const from = (page - 1) * 30;
-      q = q.range(from, from + 29);
-      
-      const { data: logs, count } = await q;
-      if (logs) {
+      try {
+        const { logs, total } = await fetchAuditLogs(supabase, user?.organization_id, { search, page, limit: 30 });
         setData({ 
           logs: logs.map(l => ({ ...l, userName: l.user_name, timestamp: l.created_at })), 
-          total: count || 0
+          total
         });
+      } catch (err) {
+        console.error('Error loading audit logs:', err);
       }
     }
     load();
-  }, [page, search, supabase]);
+  }, [page, search, supabase, user]);
 
   const actionIcon = (action) => {
     if (action.includes('LOGIN')) return '🔑';

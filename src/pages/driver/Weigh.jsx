@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { parseQRPayload } from '../../lib/qrGenerator';
+import { lookupBagByBarcode, updateBagStatus } from '../../lib/api/bags';
+import { insertAuditLog } from '../../lib/api/auditLogs';
+import { queueAction } from '../../lib/offlineQueue';
+import { branding } from '../../config/branding';
 
 export default function DriverWeigh() {
   const { supabase, user } = useAuth();
@@ -14,14 +18,18 @@ export default function DriverWeigh() {
   const lookupBag = async (code) => {
     const bagId = parseQRPayload(code) || code;
     setError(''); setBag(null); setSuccess('');
-    const { data, error: err } = await supabase.from('bags').select('*, hospitals(name, beds)').eq('barcode', bagId).single();
-    if (err || !data) { setError(`Bag not found: ${bagId}`); return; }
-    if (data.hospitals?.beds > 30) {
-      setError(`⚠️ HCF "${data.hospitals?.name}" has ${data.hospitals?.beds} beds (>30). Scanning & dispatch must be performed by the HCF staff.`);
-      return;
+    try {
+      const data = await lookupBagByBarcode(supabase, bagId, user?.organization_id);
+      if (!data) { setError(`Bag not found: ${bagId}`); return; }
+      if (data.hospitals?.beds > 30) {
+        setError(`⚠️ ${branding.nomenclature.hcf} "${data.hospitals?.name}" has ${data.hospitals?.beds} beds (>30). Scanning & dispatch must be performed by the facility staff.`);
+        return;
+      }
+      setBag(data);
+      setWeight(data.weight ? String(data.weight) : '');
+    } catch (err) {
+      setError(err.message);
     }
-    setBag(data);
-    setWeight(data.weight ? String(data.weight) : '');
   };
 
   const handleSubmit = async (e) => {
@@ -29,10 +37,31 @@ export default function DriverWeigh() {
     if (!bag || !weight) return;
     const w = parseFloat(weight);
     if (isNaN(w) || w <= 0) { setError('Enter a valid weight in kg'); return; }
+    
+    if (!navigator.onLine) {
+      queueAction('BAG_WEIGHED', {
+        bagId: bag.id,
+        barcode: bag.barcode,
+        weight: w,
+        userId: user?.id,
+        userName: user?.name
+      });
+      setSuccess(`✅ Weight ${w} kg queued offline for ${bag.barcode}`);
+      setBag(null); setBarcode(''); setWeight('');
+      return;
+    }
+
     setSaving(true);
     try {
-      await supabase.from('bags').update({ weight: w }).eq('id', bag.id);
-      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'BAG_WEIGHED', entity: 'BAG', entity_id: bag.id, details: `Weight set to ${w} kg for bag ${bag.barcode}` }).then();
+      await updateBagStatus(supabase, bag.id, 'collected', { weight: w }, user?.organization_id);
+      await insertAuditLog(supabase, {
+        userId: user?.id,
+        userName: user?.name,
+        action: 'BAG_WEIGHED',
+        entity: 'BAG',
+        entityId: bag.id,
+        details: `Weight set to ${w} kg for bag ${bag.barcode}`
+      }, user?.organization_id);
       setSuccess(`✅ Weight ${w} kg saved for ${bag.barcode}`);
       setBag(null); setBarcode(''); setWeight('');
     } catch (err) {

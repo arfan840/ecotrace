@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import Logo from '../components/Logo';
+import { branding } from '../config/branding';
+import { loginSchema } from '../lib/validation/schemas';
 import { 
   isWebBluetoothSupported, 
   connectBluetoothScale, 
@@ -89,12 +91,20 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
+      // Validate inputs using Zod
+      const parseResult = loginSchema.safeParse({ email, password });
+      if (!parseResult.success) {
+        throw new Error(parseResult.error.errors.map(err => err.message).join(', '));
+      }
+
       let user = null;
       try {
         user = await login(email, password);
       } catch (err) {
-        if (err.message.includes('Invalid login') || err.message.includes('credentials')) {
-           // Auto-signup for demo purposes
+        const isAuthError = err.message.includes('Invalid login') || err.message.includes('credentials') || err.message.includes('Invalid credentials');
+        
+        if (isAuthError && branding.demoMode) {
+           // Auto-signup for demo/trial purposes only
            const { data: signupData, error: signUpError } = await supabase.auth.signUp({ email, password });
            if (signUpError || !signupData?.user) throw err;
 
@@ -138,7 +148,7 @@ export default function LoginPage() {
       else navigate('/admin');
       
     } catch (err) {
-      setError(err.message || 'Login failed. Please check your credentials and Supabase settings.');
+      setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }

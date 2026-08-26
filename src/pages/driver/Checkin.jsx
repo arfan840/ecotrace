@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { fetchHospitals } from '../../lib/api/hospitals';
+import { insertAuditLog } from '../../lib/api/auditLogs';
+import { branding } from '../../config/branding';
 
 export default function DriverCheckin() {
   const { supabase, user } = useAuth();
@@ -12,10 +15,10 @@ export default function DriverCheckin() {
   const [hospitals, setHospitals] = useState([]);
 
   React.useEffect(() => {
-    supabase.from('hospitals').select('id, name, district').order('name').then(({ data }) => {
-      if (data) setHospitals(data);
-    });
-  }, [supabase]);
+    fetchHospitals(supabase, user?.organization_id).then(data => {
+      setHospitals(data);
+    }).catch(err => console.error(err));
+  }, [supabase, user]);
 
   const captureGPS = () => {
     setLoading(true); setError(''); setSaved(false);
@@ -35,11 +38,13 @@ export default function DriverCheckin() {
     if (!gps) { setError('Please capture GPS first.'); return; }
     setLoading(true);
     try {
-      await supabase.from('audit_logs').insert({
-        user_id: user?.id, user_name: user?.name,
-        action: 'DRIVER_CHECKIN', entity: 'CHECKIN',
+      await insertAuditLog(supabase, {
+        userId: user?.id,
+        userName: user?.name,
+        action: 'DRIVER_CHECKIN',
+        entity: 'CHECKIN',
         details: `Driver checked in at ${hospital || 'location'} — GPS: ${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}${notes ? '. Notes: ' + notes : ''}`,
-      });
+      }, user?.organization_id);
       setSaved(true);
     } catch (err) {
       setError(err.message);
@@ -88,9 +93,9 @@ export default function DriverCheckin() {
 
         <form onSubmit={handleCheckin}>
           <div className="form-group">
-            <label className="form-label">Healthcare Facility (Optional)</label>
+            <label className="form-label">{branding.nomenclature.hcf} (Optional)</label>
             <select className="form-select" value={hospital} onChange={e => setHospital(e.target.value)}>
-              <option value="">Select HCF...</option>
+              <option value="">Select {branding.nomenclature.hcfShort}...</option>
               {hospitals.map(h => <option key={h.id} value={h.name}>{h.name} — {h.district}</option>)}
             </select>
           </div>

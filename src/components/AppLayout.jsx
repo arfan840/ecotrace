@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Logo from './Logo';
+import { branding } from '../config/branding';
 
 const navConfig = {
   admin: {
-    title: 'EcoTrace — Admin',
+    title: `${branding.shortName} — Admin`,
     sections: [
       {
         title: 'Overview',
@@ -17,7 +18,7 @@ const navConfig = {
       {
         title: 'Management',
         items: [
-          { path: '/admin/hospitals', icon: '🏥', label: 'HCF Registry' },
+          { path: '/admin/hospitals', icon: '🏥', label: branding.nomenclature.hcfPlural },
           { path: '/admin/vehicles', icon: '🚛', label: 'Vehicles' },
           { path: '/admin/users', icon: '👥', label: 'Users' },
           { path: '/admin/discrepancies', icon: '⚠️', label: 'Discrepancies' },
@@ -34,7 +35,7 @@ const navConfig = {
     ]
   },
   plant: {
-    title: 'Plant Module',
+    title: `${branding.nomenclature.plant} Module`,
     sections: [
       {
         title: 'Operations',
@@ -65,10 +66,10 @@ const navConfig = {
     ]
   },
   hcf: {
-    title: 'HCF Portal',
+    title: `${branding.nomenclature.hcfShort} Portal`,
     sections: [
       {
-        title: 'HCF Operations',
+        title: `${branding.nomenclature.hcfShort} Operations`,
         items: [
           { path: '/hcf', icon: '🏥', label: 'Dashboard', end: true },
           { path: '/hcf/scan', icon: '📷', label: 'Dispatch Waste' },

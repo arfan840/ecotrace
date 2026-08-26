@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { fetchProfiles, updateProfile, deleteProfile } from '../../lib/api/profiles';
+import { fetchHospitals } from '../../lib/api/hospitals';
+import { profileSchema } from '../../lib/validation/schemas';
+import { branding } from '../../config/branding';
 
 const ROLES = [
   { value: 'plant_head', label: 'Plant Head' },
   { value: 'plant_manager', label: 'Plant Manager' },
   { value: 'driver', label: 'Driver' },
   { value: 'regulatory', label: 'Regulatory Authority' },
-  { value: 'hcf', label: 'HCF Staff' },
+  { value: 'hcf', label: branding.nomenclature.hcfShort + ' Staff' },
 ];
 
 export default function Users() {
-  const { supabase } = useAuth();
+  const { supabase, user } = useAuth();
   const [users, setUsers] = useState([]);
   const [roleFilter, setRoleFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -21,21 +25,24 @@ export default function Users() {
   const [hospitals, setHospitals] = useState([]);
 
   useEffect(() => {
-    supabase.from('hospitals').select('id, name').order('name').then(({ data }) => {
-      if (data) setHospitals(data);
-    });
-  }, [supabase]);
+    fetchHospitals(supabase, user?.organization_id).then(data => {
+      setHospitals(data);
+    }).catch(err => console.error(err));
+  }, [supabase, user]);
 
   useEffect(() => {
     async function load() {
-      let query = supabase.from('profiles').select('*, hospitals(name)').order('created_at', { ascending: false });
-      if (roleFilter) query = query.eq('role', roleFilter);
-      if (search) query = query.ilike('name', `%${search}%`);
-      const { data } = await query;
-      if (data) setUsers(data);
+      try {
+        let data = await fetchProfiles(supabase, user?.organization_id);
+        if (roleFilter) data = data.filter(u => u.role === roleFilter);
+        if (search) data = data.filter(u => u.name?.toLowerCase().includes(search.toLowerCase()));
+        setUsers(data);
+      } catch (err) {
+        console.error(err);
+      }
     }
     load();
-  }, [roleFilter, search, refresh, supabase]);
+  }, [roleFilter, search, refresh, supabase, user]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -45,27 +52,38 @@ export default function Users() {
       return;
     }
     
-    // Update existing profile
-    await supabase.from('profiles').update({
+    // Zod validation
+    const payload = {
       name: form.name,
+      email: form.email,
       role: form.role,
       phone: form.phone,
       hospital_id: form.role === 'hcf' ? form.hospital_id || null : null
-    }).eq('id', editId);
-    
-    setShowModal(false);
-    setEditId(null);
-    setRefresh(r => r + 1);
+    };
+
+    const parseResult = profileSchema.safeParse(payload);
+    if (!parseResult.success) {
+      alert('Validation Error: ' + parseResult.error.errors.map(err => err.message).join('\n'));
+      return;
+    }
+
+    try {
+      await updateProfile(supabase, editId, payload, user?.organization_id);
+      setShowModal(false);
+      setEditId(null);
+      setRefresh(r => r + 1);
+    } catch (err) {
+      alert('Error updating user: ' + err.message);
+    }
   };
 
   const handleDelete = async (id, name) => {
     if (!window.confirm(`Are you sure you want to delete user ${name}? This will fail if the user has recorded any history in the system.`)) return;
     try {
-      const { error } = await supabase.from('profiles').delete().eq('id', id);
-      if (error) throw error;
+      await deleteProfile(supabase, id, user?.organization_id);
       setRefresh(r => r + 1);
     } catch (err) {
-      alert('Error deleting user: ' + (err.message || JSON.stringify(err)));
+      alert('Error deleting user: ' + err.message);
     }
   };
 
@@ -137,9 +155,9 @@ export default function Users() {
               </div>
               {form.role === 'hcf' && (
                 <div className="form-group">
-                  <label className="form-label">Associated Healthcare Facility</label>
+                  <label className="form-label">Associated {branding.nomenclature.hcf}</label>
                   <select className="form-select" value={form.hospital_id || ''} onChange={e => setForm(f => ({ ...f, hospital_id: e.target.value }))} required>
-                    <option value="">Select HCF...</option>
+                    <option value="">Select {branding.nomenclature.hcfShort}...</option>
                     {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
                   </select>
                 </div>

@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle } from '../../lib/api/vehicles';
+import { fetchProfiles } from '../../lib/api/profiles';
+import { insertAuditLog } from '../../lib/api/auditLogs';
+import { vehicleSchema } from '../../lib/validation/schemas';
+import { branding } from '../../config/branding';
 
 export default function Vehicles() {
   const { supabase, user } = useAuth();
@@ -12,15 +17,19 @@ export default function Vehicles() {
   const [form, setForm] = useState(emptyForm);
 
   const load = async () => {
-    const [{ data: v }, { data: d }] = await Promise.all([
-      supabase.from('vehicles').select('*, profiles(name)').order('number'),
-      supabase.from('profiles').select('id, name').eq('role', 'driver'),
-    ]);
-    if (v) setVehicles(v);
-    if (d) setDrivers(d);
+    try {
+      const [vData, allProfiles] = await Promise.all([
+        fetchVehicles(supabase, user?.organization_id),
+        fetchProfiles(supabase, user?.organization_id)
+      ]);
+      setVehicles(vData);
+      setDrivers(allProfiles.filter(p => p.role === 'driver'));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  useEffect(() => { load(); }, [supabase]);
+  useEffect(() => { load(); }, [supabase, user]);
 
   const openCreate = () => { setForm(emptyForm); setEditing(null); setShowModal(true); };
   const openEdit = (v) => {
@@ -31,15 +40,29 @@ export default function Vehicles() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    
+    // Zod validation
+    const parseResult = vehicleSchema.safeParse(form);
+    if (!parseResult.success) {
+      alert('Validation Error: ' + parseResult.error.errors.map(err => err.message).join('\n'));
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = { ...form, driver_id: form.driver_id || null };
       if (editing) {
-        await supabase.from('vehicles').update(payload).eq('id', editing.id);
+        await updateVehicle(supabase, editing.id, payload, user?.organization_id);
       } else {
-        await supabase.from('vehicles').insert(payload);
+        await createVehicle(supabase, payload, user?.organization_id);
       }
-      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: editing ? 'VEHICLE_UPDATED' : 'VEHICLE_CREATED', entity: 'VEHICLE', details: `Vehicle: ${form.number}` }).then();
+      insertAuditLog(supabase, {
+        userId: user?.id,
+        userName: user?.name,
+        action: editing ? 'VEHICLE_UPDATED' : 'VEHICLE_CREATED',
+        entity: 'VEHICLE',
+        details: `Vehicle: ${form.number}`
+      }, user?.organization_id).then();
       await load();
       setShowModal(false);
     } catch (err) {
@@ -52,12 +75,17 @@ export default function Vehicles() {
   const handleDelete = async (id, number) => {
     if (!window.confirm(`Are you sure you want to delete vehicle ${number}?`)) return;
     try {
-      const { error } = await supabase.from('vehicles').delete().eq('id', id);
-      if (error) throw error;
-      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'VEHICLE_DELETED', entity: 'VEHICLE', details: `Deleted Vehicle: ${number}` }).then();
+      await deleteVehicle(supabase, id, user?.organization_id);
+      insertAuditLog(supabase, {
+        userId: user?.id,
+        userName: user?.name,
+        action: 'VEHICLE_DELETED',
+        entity: 'VEHICLE',
+        details: `Deleted Vehicle: ${number}`
+      }, user?.organization_id).then();
       await load();
     } catch (err) {
-      alert('Error deleting: ' + (err.message || JSON.stringify(err)));
+      alert('Error deleting: ' + err.message);
     }
   };
 

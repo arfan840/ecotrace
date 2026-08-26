@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { fetchProfile } from '../lib/api/profiles';
 
 const AuthContext = createContext(null);
 
@@ -11,23 +12,22 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) fetchProfile(session.user.id);
+      if (session) fetchProfileLocal(session.user.id);
       else setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) fetchProfile(session.user.id);
+      if (session) fetchProfileLocal(session.user.id);
       else { setUser(null); setLoading(false); }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId) => {
+  const fetchProfileLocal = async (userId) => {
     try {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
-      if (error) throw error;
+      const data = await fetchProfile(supabase, userId);
       setUser(data);
     } catch (err) {
       console.error('Error fetching profile:', err);
@@ -45,8 +45,7 @@ export function AuthProvider({ children }) {
       throw error;
     }
     
-    // Fetch profile immediately to return it
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
+    const profile = await fetchProfile(supabase, authUser.id);
     return profile;
   }, []);
 

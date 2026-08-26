@@ -1,8 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { generateBagIds } from '../../lib/bagId';
 import QRLabel from '../../components/QRLabel';
 import PrintLabelButton, { printLabels } from '../../components/PrintLabel';
+import { fetchHospitals } from '../../lib/api/hospitals';
+import { fetchFilteredBags, createBags } from '../../lib/api/bags';
+import { fetchAuditLogsByEntity, insertAuditLog } from '../../lib/api/auditLogs';
+import { bagSchema } from '../../lib/validation/schemas';
+import { branding } from '../../config/branding';
 
 export default function Bags() {
   const { supabase, user } = useAuth();
@@ -18,28 +23,36 @@ export default function Bags() {
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   useEffect(() => {
-    supabase.from('hospitals').select('id, name, hcf_code, district, state').order('name').then(({ data }) => {
-      if (data) setHospitals(data);
-    });
-  }, [supabase]);
+    fetchHospitals(supabase, user?.organization_id).then(data => {
+      setHospitals(data);
+    }).catch(err => console.error(err));
+  }, [supabase, user]);
 
   useEffect(() => {
     async function load() {
-      let q = supabase.from('bags').select('*', { count: 'exact' }).order('created_at', { ascending: false });
-      if (filters.status) q = q.eq('status', filters.status);
-      if (filters.category) q = q.eq('category', filters.category);
-      if (filters.search) q = q.or(`barcode.ilike.%${filters.search}%,hospital_name.ilike.%${filters.search}%`);
-      const from = (page - 1) * 25;
-      q = q.range(from, from + 24);
-      const { data: bags, count } = await q;
-      if (bags) setData({ bags, total: count || 0 });
+      try {
+        const { bags, total } = await fetchFilteredBags(supabase, user?.organization_id, {
+          status: filters.status,
+          category: filters.category,
+          search: filters.search,
+          page,
+          limit: 25
+        });
+        setData({ bags, total });
+      } catch (err) {
+        console.error('Error loading bags:', err);
+      }
     }
     load();
-  }, [filters, page, supabase]);
+  }, [filters, page, supabase, user]);
 
   const handleSelectBag = async (bag) => {
-    const { data: logs } = await supabase.from('audit_logs').select('*').eq('entity_id', bag.id).order('created_at', { ascending: true });
-    setSelectedBag({ ...bag, scanHistory: logs?.map(l => ({ action: l.action, timestamp: l.created_at })) || [] });
+    try {
+      const logs = await fetchAuditLogsByEntity(supabase, bag.id, user?.organization_id);
+      setSelectedBag({ ...bag, scanHistory: logs.map(l => ({ action: l.action, timestamp: l.created_at })) });
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleCreate = async (e) => {
@@ -47,7 +60,7 @@ export default function Bags() {
     setCreating(true);
     try {
       const hospital = hospitals.find(h => h.id === form.hospital_id);
-      if (!hospital) throw new Error('Please select a hospital');
+      if (!hospital) throw new Error(`Please select a ${branding.nomenclature.hcf}`);
       const qty = Math.min(Math.max(1, Number(form.quantity)), 50);
 
       const bagIds = await generateBagIds(supabase, hospital, form.category, qty);
@@ -55,21 +68,26 @@ export default function Bags() {
         barcode: bid,
         hospital_id: hospital.id,
         hospital_name: hospital.name,
-        hcf_code: hospital.hcf_code,
+        hcf_code: hospital.hcf_code || null,
         district: hospital.district,
-        state: hospital.state || 'JH',
+        state: hospital.state || branding.regulatory.stateCode,
         category: form.category,
         status: 'created',
       }));
 
-      const { data: inserted, error } = await supabase.from('bags').insert(rows).select();
-      if (error) throw error;
+      // Zod Validation
+      rows.forEach(r => bagSchema.parse(r));
+
+      const inserted = await createBags(supabase, rows, user?.organization_id);
 
       // Audit log
-      supabase.from('audit_logs').insert({
-        user_id: user?.id, user_name: user?.name,
-        action: 'BAGS_CREATED', entity: 'BAG', details: `Created ${qty} ${form.category} bags for ${hospital.name}`
-      }).then();
+      insertAuditLog(supabase, {
+        userId: user?.id,
+        userName: user?.name,
+        action: 'BAGS_CREATED',
+        entity: 'BAG',
+        details: `Created ${qty} ${form.category} bags for ${hospital.name}`
+      }, user?.organization_id).then();
 
       setNewBags(inserted || rows);
       setData(d => ({ ...d, total: d.total + qty })); // optimistic
@@ -179,9 +197,9 @@ export default function Bags() {
               <form onSubmit={handleCreate}>
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Healthcare Facility *</label>
+                    <label className="form-label">{branding.nomenclature.hcf} *</label>
                     <select className="form-select" value={form.hospital_id} onChange={e => setForm(f => ({ ...f, hospital_id: e.target.value }))} required>
-                      <option value="">Select HCF...</option>
+                      <option value="">Select {branding.nomenclature.hcfShort}...</option>
                       {hospitals.map(h => (
                         <option key={h.id} value={h.id}>{h.name} ({h.hcf_code || 'No code'})</option>
                       ))}

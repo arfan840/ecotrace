@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { generateCertificateHTML } from '../../lib/certificate';
 import Logo from '../../components/Logo';
+import { fetchHospitals } from '../../lib/api/hospitals';
+import { fetchBatches } from '../../lib/api/batches';
+import { fetchBagsByBatch } from '../../lib/api/bags';
+import { branding } from '../../config/branding';
 
 export default function Certificates() {
   const { supabase, user } = useAuth();
@@ -14,78 +18,76 @@ export default function Certificates() {
   useEffect(() => {
     async function loadResources() {
       setLoading(true);
-      
-      let hospitalIdToUse = selectedHospitalId;
-      if (user?.role === 'hcf') {
-        hospitalIdToUse = user.hospital_id;
-        const { data: hData } = await supabase.from('hospitals').select('id, name, hcf_code').eq('id', user.hospital_id).single();
-        if (hData) setHospitals([hData]);
-      } else {
-        // Fetch Hospitals for the filter
-        const { data: hData } = await supabase.from('hospitals').select('id, name, hcf_code').order('name');
-        if (hData) setHospitals(hData);
-      }
+      try {
+        let hospitalIdToUse = selectedHospitalId;
+        if (user?.role === 'hcf') {
+          hospitalIdToUse = user.hospital_id;
+          const hDataList = await fetchHospitals(supabase, user.organization_id);
+          const hData = hDataList.find(h => h.id === user.hospital_id);
+          if (hData) setHospitals([hData]);
+        } else {
+          const hData = await fetchHospitals(supabase, user?.organization_id);
+          if (hData) setHospitals(hData);
+        }
 
-      // Fetch Batches
-      const { data: bData } = await supabase.from('batches').select('*').eq('status', 'treated').order('treated_at', { ascending: false });
-      
-      if (bData) {
-        // If an HCF is selected or logged in, we need to calculate specific totals for that HCF in each batch
-        const formattedBatches = await Promise.all(bData.map(async b => {
-          const { data: bags } = await supabase.from('bags')
-            .select('category, weight, hospital_name, hospital_id')
-            .eq('batch_id', b.id);
+        const bData = await fetchBatches(supabase, user?.organization_id);
+        const treatedBatches = bData.filter(b => b.status === 'treated');
+        
+        if (treatedBatches) {
+          const formattedBatches = await Promise.all(treatedBatches.map(async b => {
+            const bagsList = await fetchBagsByBatch(supabase, b.id, user?.organization_id);
             
-          const bagsList = bags || [];
-          
-          let filteredBags = bagsList;
-          if (hospitalIdToUse) {
-            filteredBags = bagsList.filter(bag => bag.hospital_id === hospitalIdToUse);
-          }
-
-          const bagCount = filteredBags.length;
-          const totalWeight = filteredBags.reduce((sum, bag) => sum + (Number(bag.weight) || 0), 0);
-          const categories = Array.from(new Set(filteredBags.map(bag => bag.category)));
-          const sourceHospitals = hospitalIdToUse
-            ? [filteredBags[0]?.hospital_name || 'Selected Facility']
-            : Array.from(new Set(bagsList.map(bag => bag.hospital_name)));
-
-          // Calculate category-wise breakdown (bags count and total weight)
-          const categoryBreakdown = {
-            Yellow: { count: 0, weight: 0 },
-            Red: { count: 0, weight: 0 },
-            White: { count: 0, weight: 0 },
-            Blue: { count: 0, weight: 0 }
-          };
-
-          filteredBags.forEach(bag => {
-            const cat = bag.category;
-            if (categoryBreakdown[cat]) {
-              categoryBreakdown[cat].count += 1;
-              categoryBreakdown[cat].weight += (Number(bag.weight) || 0);
+            let filteredBags = bagsList;
+            if (hospitalIdToUse) {
+              filteredBags = bagsList.filter(bag => bag.hospital_id === hospitalIdToUse);
             }
-          });
 
-          return {
-            ...b,
-            batchNumber: b.batch_number,
-            bagCount,
-            totalWeight: totalWeight.toFixed(2),
-            treatmentType: b.treatment_type,
-            treatedAt: b.treated_at,
-            certificateId: b.id,
-            certificate: bagCount > 0, // Only show if this hospital actually had bags in this batch
-            generatedAt: b.treated_at,
-            categories: categories,
-            categoryBreakdown,
-            hospitals: sourceHospitals,
-            operator: b.operator || 'System Operator'
-          };
-        }));
+            const bagCount = filteredBags.length;
+            const totalWeight = filteredBags.reduce((sum, bag) => sum + (Number(bag.weight) || 0), 0);
+            const categories = Array.from(new Set(filteredBags.map(bag => bag.category)));
+            const sourceHospitals = hospitalIdToUse
+              ? [filteredBags[0]?.hospital_name || 'Selected Facility']
+              : Array.from(new Set(bagsList.map(bag => bag.hospital_name)));
 
-        setBatches(formattedBatches.filter(b => b.certificate));
+            const categoryBreakdown = {
+              Yellow: { count: 0, weight: 0 },
+              Red: { count: 0, weight: 0 },
+              White: { count: 0, weight: 0 },
+              Blue: { count: 0, weight: 0 }
+            };
+
+            filteredBags.forEach(bag => {
+              const cat = bag.category;
+              if (categoryBreakdown[cat]) {
+                categoryBreakdown[cat].count += 1;
+                categoryBreakdown[cat].weight += (Number(bag.weight) || 0);
+              }
+            });
+
+            return {
+              ...b,
+              batchNumber: b.batch_number,
+              bagCount,
+              totalWeight: totalWeight.toFixed(2),
+              treatmentType: b.treatment_type,
+              treatedAt: b.treated_at,
+              certificateId: b.id,
+              certificate: bagCount > 0,
+              generatedAt: b.treated_at,
+              categories: categories,
+              categoryBreakdown,
+              hospitals: sourceHospitals,
+              operator: b.operator || 'System Operator'
+            };
+          }));
+
+          setBatches(formattedBatches.filter(b => b.certificate));
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     loadResources();
   }, [supabase, selectedHospitalId, user]);
@@ -114,14 +116,14 @@ export default function Certificates() {
         </div>
         {user?.role !== 'hcf' && (
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Filter by HCF:</label>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Filter by {branding.nomenclature.hcfShort}:</label>
             <select 
               className="form-select" 
               style={{ minWidth: 250, padding: '6px 12px' }}
               value={selectedHospitalId}
               onChange={(e) => setSelectedHospitalId(e.target.value)}
             >
-              <option value="">All Facilities (Batch-wise)</option>
+              <option value="">All {branding.nomenclature.hcfPlural} (Batch-wise)</option>
               {hospitals.map(h => (
                 <option key={h.id} value={h.id}>{h.name} ({h.hcf_code})</option>
               ))}

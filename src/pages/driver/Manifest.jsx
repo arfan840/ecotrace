@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { fetchRoutes, closeRoute as closeRouteApi } from '../../lib/api/routes';
+import { fetchBagsByRoute } from '../../lib/api/bags';
+import { insertAuditLog } from '../../lib/api/auditLogs';
+import { branding } from '../../config/branding';
 
 export default function DriverManifest() {
   const { supabase, user } = useAuth();
@@ -11,25 +15,46 @@ export default function DriverManifest() {
   useEffect(() => {
     async function load() {
       if (!user) return;
-      const { data } = await supabase.from('routes').select('*').eq('driver_id', user.id);
-      if (data) setRoutes(data.map(r => ({ ...r, vehicleNumber: r.vehicle_number, siteNames: ['Multiple Sites'], status: r.status })));
+      try {
+        const data = await fetchRoutes(supabase, user.organization_id);
+        const driverRoutes = data.filter(r => r.driver_id === user.id);
+        setRoutes(driverRoutes.map(r => ({ ...r, vehicleNumber: r.vehicle_number, siteNames: ['Multiple Sites'], status: r.status })));
+      } catch (err) {
+        console.error(err);
+      }
     }
     load();
   }, [refresh, supabase, user]);
 
   const viewRoute = async (route) => {
     setSelectedRoute(route);
-    const { data } = await supabase.from('bags').select('*').eq('route_id', route.id).eq('status', 'collected');
-    if (data) setRouteBags(data);
+    try {
+      const data = await fetchBagsByRoute(supabase, route.id, user?.organization_id);
+      const collectedBags = data.filter(b => b.status === 'collected');
+      setRouteBags(collectedBags);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const closeRoute = async () => {
     if (!selectedRoute) return;
-    await supabase.from('routes').update({ status: 'closed' }).eq('id', selectedRoute.id);
-    setSelectedRoute(null);
-    setRefresh(r => r + 1);
-    
-    supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'ROUTE_CLOSED', entity: 'ROUTE', entity_id: selectedRoute.id, details: `Driver closed route manifest.` }).then();
+    try {
+      await closeRouteApi(supabase, selectedRoute.id, user?.organization_id);
+      setSelectedRoute(null);
+      setRefresh(r => r + 1);
+      
+      insertAuditLog(supabase, {
+        userId: user?.id,
+        userName: user?.name,
+        action: 'ROUTE_CLOSED',
+        entity: 'ROUTE',
+        entityId: selectedRoute.id,
+        details: `Driver closed route manifest.`
+      }, user?.organization_id).then();
+    } catch (err) {
+      alert('Error closing route: ' + err.message);
+    }
   };
 
   return (

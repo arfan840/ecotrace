@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { fetchHospitals, createHospital, updateHospital, deleteHospital } from '../../lib/api/hospitals';
+import { insertAuditLog } from '../../lib/api/auditLogs';
+import { hospitalSchema } from '../../lib/validation/schemas';
+import { branding } from '../../config/branding';
 
 export default function Hospitals() {
   const { supabase, user } = useAuth();
@@ -11,19 +15,23 @@ export default function Hospitals() {
 
   const emptyForm = {
     name: '', hcf_code: '', type: 'General', hospital_type: 'bedded', bedded: true,
-    beds: '', district: '', state: 'JH', address: '', pincode: '', contact: '',
+    beds: '', district: '', state: branding.regulatory.stateCode, address: '', pincode: '', contact: '',
   };
   const [form, setForm] = useState(emptyForm);
 
   const load = async () => {
-    const { data } = await supabase.from('hospitals').select('*').order('name');
-    if (data) setHospitals(data);
+    try {
+      const data = await fetchHospitals(supabase, user?.organization_id);
+      setHospitals(data);
+    } catch (err) {
+      console.error('Error loading hospitals:', err);
+    }
   };
 
-  useEffect(() => { load(); }, [supabase]);
+  useEffect(() => { load(); }, [supabase, user]);
 
   const openCreate = () => {
-    const nextCode = `HCF${String(hospitals.length + 1).padStart(4, '0')}`;
+    const nextCode = `${branding.nomenclature.hcfShort}${String(hospitals.length + 1).padStart(4, '0')}`;
     setForm({ ...emptyForm, hcf_code: nextCode });
     setEditing(null);
     setShowModal(true);
@@ -33,7 +41,7 @@ export default function Hospitals() {
     setForm({
       name: h.name || '', hcf_code: h.hcf_code || '', type: h.type || 'General',
       hospital_type: h.hospital_type || 'bedded', bedded: h.bedded !== false,
-      beds: h.beds || '', district: h.district || '', state: h.state || 'JH',
+      beds: h.beds || '', district: h.district || '', state: h.state || branding.regulatory.stateCode,
       address: h.address || '', pincode: h.pincode || '', contact: h.contact || '',
     });
     setEditing(h);
@@ -42,10 +50,14 @@ export default function Hospitals() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.hcf_code || !form.district || !form.address || !form.contact) {
-      alert('Please fill out all required fields marked with * (Name, HCF Code, District, Address, Contact).');
+    
+    // Zod Validation
+    const parseResult = hospitalSchema.safeParse(form);
+    if (!parseResult.success) {
+      alert('Validation Error: ' + parseResult.error.errors.map(err => err.message).join('\n'));
       return;
     }
+    
     setSaving(true);
     try {
       const payload = {
@@ -54,33 +66,50 @@ export default function Hospitals() {
         beds: form.beds ? Number(form.beds) : null,
       };
       if (editing) {
-        const { error } = await supabase.from('hospitals').update(payload).eq('id', editing.id);
-        if (error) throw error;
-        supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'HCF_UPDATED', entity: 'HOSPITAL', entity_id: editing.id, details: `Updated HCF: ${form.name}` }).then();
+        const data = await updateHospital(supabase, editing.id, payload, user?.organization_id);
+        insertAuditLog(supabase, {
+          userId: user?.id,
+          userName: user?.name,
+          action: 'HCF_UPDATED',
+          entity: 'HOSPITAL',
+          entityId: editing.id,
+          details: `Updated HCF: ${form.name}`
+        }, user?.organization_id).then();
       } else {
-        const { error } = await supabase.from('hospitals').insert(payload);
-        if (error) throw error;
-        supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'HCF_CREATED', entity: 'HOSPITAL', details: `Created HCF: ${form.name}` }).then();
+        const data = await createHospital(supabase, payload, user?.organization_id);
+        insertAuditLog(supabase, {
+          userId: user?.id,
+          userName: user?.name,
+          action: 'HCF_CREATED',
+          entity: 'HOSPITAL',
+          entityId: data?.id,
+          details: `Created HCF: ${form.name}`
+        }, user?.organization_id).then();
       }
       await load();
       setShowModal(false);
     } catch (err) {
       console.error('Save error:', err);
-      alert('Database Error: ' + (err.message || JSON.stringify(err)));
+      alert('Error: ' + err.message);
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete HCF ${name}?`)) return;
+    if (!window.confirm(`Are you sure you want to delete ${branding.nomenclature.hcf} ${name}?`)) return;
     try {
-      const { error } = await supabase.from('hospitals').delete().eq('id', id);
-      if (error) throw error;
-      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'HCF_DELETED', entity: 'HOSPITAL', details: `Deleted HCF: ${name}` }).then();
+      await deleteHospital(supabase, id, user?.organization_id);
+      insertAuditLog(supabase, {
+        userId: user?.id,
+        userName: user?.name,
+        action: 'HCF_DELETED',
+        entity: 'HOSPITAL',
+        details: `Deleted HCF: ${name}`
+      }, user?.organization_id).then();
       await load();
     } catch (err) {
-      alert('Error deleting: ' + (err.message || JSON.stringify(err)));
+      alert('Error deleting: ' + err.message);
     }
   };
 
@@ -93,8 +122,8 @@ export default function Hospitals() {
   return (
     <div className="slide-up">
       <div className="card-header">
-        <h2>🏥 Healthcare Facilities (HCFs)</h2>
-        <button className="btn btn-primary" onClick={openCreate}>➕ Add HCF</button>
+        <h2>🏥 {branding.nomenclature.hcfPlural}</h2>
+        <button className="btn btn-primary" onClick={openCreate}>➕ Add {branding.nomenclature.hcfShort}</button>
       </div>
 
       <div className="filter-bar">
@@ -113,7 +142,7 @@ export default function Hospitals() {
         <div className="data-table-wrapper">
           <table className="data-table">
             <thead><tr>
-              <th>HCF Code</th><th>Name</th><th>Type</th><th>Bedded</th><th>District</th><th>Beds</th><th>Contact</th><th>Actions</th>
+              <th>{branding.nomenclature.hcfShort} Code</th><th>Name</th><th>Type</th><th>Bedded</th><th>District</th><th>Beds</th><th>Contact</th><th>Actions</th>
             </tr></thead>
             <tbody>
               {filtered.map(h => (
@@ -132,7 +161,7 @@ export default function Hospitals() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>No HCFs found. Add one above.</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>No {branding.nomenclature.hcfPlural} found. Add one above.</td></tr>
               )}
             </tbody>
           </table>
@@ -143,7 +172,7 @@ export default function Hospitals() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal-content" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{editing ? 'Edit HCF' : 'Add Healthcare Facility'}</h2>
+              <h2>{editing ? `Edit ${branding.nomenclature.hcfShort}` : `Add ${branding.nomenclature.hcf}`}</h2>
               <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             </div>
             <form onSubmit={handleSave}>
@@ -153,7 +182,7 @@ export default function Hospitals() {
                   <input className="form-input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required placeholder="e.g., District General Hospital" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">HCF Code *</label>
+                  <label className="form-label">{branding.nomenclature.hcfShort} Code *</label>
                   <input className="form-input" value={form.hcf_code} onChange={e => setForm(f => ({ ...f, hcf_code: e.target.value.toUpperCase() }))} required placeholder="e.g., HCF0001" />
                 </div>
               </div>

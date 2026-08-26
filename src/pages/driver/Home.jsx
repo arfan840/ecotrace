@@ -2,6 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { parseQRPayload } from '../../lib/qrGenerator';
 import { isWebBluetoothSupported, connectBluetoothScale, simulateWeightFetch, disconnectActiveDevice } from '../../lib/bluetoothScale';
+import { fetchActiveRouteForDriver, startRoute as startRouteApi } from '../../lib/api/routes';
+import { fetchVehicles } from '../../lib/api/vehicles';
+import { lookupBagByBarcode, updateBagStatus, fetchBagsByRoute } from '../../lib/api/bags';
+import { insertAuditLog } from '../../lib/api/auditLogs';
+import { queueAction } from '../../lib/offlineQueue';
+import { branding } from '../../config/branding';
 
 export default function DriverHome() {
   const { supabase, user } = useAuth();
@@ -26,17 +32,19 @@ export default function DriverHome() {
   
   const load = async () => {
     try {
-      const { data: r } = await supabase.from('routes').select('*').eq('driver_id', user?.id).eq('status', 'active').order('created_at', { ascending: false }).limit(1).single();
-      setRoute(r || null);
+      const activeRoute = await fetchActiveRouteForDriver(supabase, user?.id, user?.organization_id);
+      setRoute(activeRoute);
 
-      if (r) {
-        const { data: bags } = await supabase.from('bags').select('id, status').eq('route_id', r.id);
+      if (activeRoute) {
+        const bags = await fetchBagsByRoute(supabase, activeRoute.id, user?.organization_id);
         const collected = bags?.filter(b => b.status === 'collected' || b.status === 'received' || b.status === 'treated').length || 0;
         setStats({ collected });
       } else {
-        const { data: v } = await supabase.from('vehicles').select('id, number').eq('status', 'active');
-        if (v) setVehicles(v);
+        const v = await fetchVehicles(supabase, user?.organization_id);
+        setVehicles(v.filter(vehicle => vehicle.status === 'active'));
       }
+    } catch (err) {
+      console.error('Error loading driver dashboard:', err);
     } finally {
       setLoading(false);
     }
@@ -56,12 +64,22 @@ export default function DriverHome() {
     if (!selectedVehicle) return showError('Select a vehicle first');
     try {
       const vehicle = vehicles.find(v => v.id === selectedVehicle);
-      const { data, error } = await supabase.from('routes').insert({
-        driver_id: user.id, driver_name: user.name,
-        vehicle_id: selectedVehicle, vehicle_number: vehicle?.number,
-        status: 'active', date: new Date().toISOString(),
-      }).select().single();
-      if (error) throw error;
+      const data = await startRouteApi(supabase, {
+        driverId: user.id,
+        driverName: user.name,
+        vehicleId: selectedVehicle,
+        vehicleNumber: vehicle?.number,
+      }, user?.organization_id);
+
+      insertAuditLog(supabase, {
+        userId: user?.id,
+        userName: user?.name,
+        action: 'ROUTE_STARTED',
+        entity: 'ROUTE',
+        entityId: data?.id,
+        details: `Route started with ${vehicle?.number}`
+      }, user?.organization_id).then();
+
       await load();
       showSuccess(`Route started with ${vehicle?.number}`);
     } catch (err) { showError(err.message); }
@@ -73,12 +91,28 @@ export default function DriverHome() {
       async (pos) => {
         const gpsData = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setGps(gpsData);
-        try {
-          await supabase.from('audit_logs').insert({
-            user_id: user?.id, user_name: user?.name,
-            action: 'DRIVER_CHECKIN', entity: 'CHECKIN',
-            details: `Driver GPS Check-in: ${gpsData.lat.toFixed(6)}, ${gpsData.lng.toFixed(6)}`,
+        
+        if (!navigator.onLine) {
+          queueAction('GPS_CHECKIN', {
+            userId: user?.id,
+            userName: user?.name,
+            lat: gpsData.lat,
+            lng: gpsData.lng
           });
+          showSuccess('📍 Location check-in queued offline');
+          return;
+        }
+
+        try {
+          await insertAuditLog(supabase, {
+            user_id: user?.id,
+            user_name: user?.name,
+            userId: user?.id,
+            userName: user?.name,
+            action: 'DRIVER_CHECKIN',
+            entity: 'CHECKIN',
+            details: `Driver GPS Check-in: ${gpsData.lat.toFixed(6)}, ${gpsData.lng.toFixed(6)}`,
+          }, user?.organization_id);
           showSuccess('📍 Location captured and logged');
         } catch (noop) {}
       },
@@ -116,14 +150,18 @@ export default function DriverHome() {
   };
 
   const lookupBag = async (code) => {
-    const { data, error: err } = await supabase.from('bags').select('*, hospitals(name, beds)').eq('barcode', code).single();
-    if (err || !data) return showError(`Not found: ${code}`);
-    if (data.hospitals?.beds > 30) {
-      return showError(`⚠️ HCF "${data.hospitals?.name}" has ${data.hospitals?.beds} beds (>30). Scanning & dispatch must be performed by the HCF staff.`);
+    try {
+      const data = await lookupBagByBarcode(supabase, code, user?.organization_id);
+      if (!data) return showError(`Not found: ${code}`);
+      if (data.hospitals?.beds > 30) {
+        return showError(`⚠️ ${branding.nomenclature.hcf} "${data.hospitals?.name}" has ${data.hospitals?.beds} beds (>30). Scanning & dispatch must be performed by the facility staff.`);
+      }
+      if (data.status !== 'created') return showError(`Bag already ${data.status}`);
+      setScannedBag(data);
+      triggerBluetoothWeigh();
+    } catch (err) {
+      showError(err.message);
     }
-    if (data.status !== 'created') return showError(`Bag already ${data.status}`);
-    setScannedBag(data);
-    triggerBluetoothWeigh(); // Auto trigger imaginary bluetooth scale
   };
 
   const triggerBluetoothWeigh = () => {
@@ -151,21 +189,43 @@ export default function DriverHome() {
 
   const confirmCollection = async () => {
     if (!scannedBag || !weight) return showError('Weight required');
+    
+    const payload = {
+      bagId: scannedBag.id,
+      barcode: scannedBag.barcode,
+      weight: parseFloat(weight),
+      userId: user?.id,
+      userName: user?.name,
+      routeId: route?.id,
+      gps: gps || null
+    };
+
+    if (!navigator.onLine) {
+      queueAction('BAG_COLLECTED', payload);
+      setStats(s => ({ collected: s.collected + 1 }));
+      showSuccess(`✅ Scanned & Weighed (Queued Offline): ${weight}kg`);
+      setScannedBag(null); setWeight(''); setManualCode('');
+      return;
+    }
+
     try {
-      await supabase.from('bags').update({
-        status: 'collected',
+      await updateBagStatus(supabase, scannedBag.id, 'collected', {
         weight: parseFloat(weight),
         collected_at: new Date().toISOString(),
         collected_by: user?.id,
         route_id: route?.id,
-        gps_lat: gps?.lat, gps_lng: gps?.lng
-      }).eq('id', scannedBag.id);
+        gps_lat: gps?.lat || null,
+        gps_lng: gps?.lng || null
+      }, user?.organization_id);
       
-      supabase.from('audit_logs').insert({
-        user_id: user?.id, user_name: user?.name,
-        action: 'BAG_COLLECTED', entity: 'BAG', entity_id: scannedBag.id,
+      insertAuditLog(supabase, {
+        userId: user?.id,
+        userName: user?.name,
+        action: 'BAG_COLLECTED',
+        entity: 'BAG',
+        entityId: scannedBag.id,
         details: `Bag ${scannedBag.barcode} collected & weighed (${weight}kg)`
-      }).then();
+      }, user?.organization_id).then();
 
       setStats(s => ({ collected: s.collected + 1 }));
       showSuccess(`✅ Scanned & Weighed: ${weight}kg`);
