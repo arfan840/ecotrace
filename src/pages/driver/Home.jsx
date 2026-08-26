@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { parseQRPayload } from '../../lib/qrGenerator';
-import { isWebBluetoothSupported, connectBluetoothScale, simulateWeightFetch, disconnectActiveDevice } from '../../lib/bluetoothScale';
+import { isWebBluetoothSupported } from '../../lib/bluetoothScale';
 import { fetchActiveRouteForDriver, startRoute as startRouteApi } from '../../lib/api/routes';
 import { fetchVehicles } from '../../lib/api/vehicles';
 import { lookupBagByBarcode, updateBagStatus, fetchBagsByRoute } from '../../lib/api/bags';
@@ -9,6 +9,8 @@ import { insertAuditLog } from '../../lib/api/auditLogs';
 import { queueAction } from '../../lib/offlineQueue';
 import { branding } from '../../config/branding';
 import { logError } from '../../lib/errors';
+import useQrScanner from '../../hooks/useQrScanner';
+import useBluetoothScale from '../../hooks/useBluetoothScale';
 
 export default function DriverHome() {
   const { supabase, user } = useAuth();
@@ -20,16 +22,13 @@ export default function DriverHome() {
   
   // Feature states
   const [gps, setGps] = useState(null);
-  const [scanning, setScanning] = useState(false);
   const [scannedBag, setScannedBag] = useState(null);
   const [manualCode, setManualCode] = useState('');
-  const [weight, setWeight] = useState('');
-  const [btLoading, setBtLoading] = useState(false);
-  const [btStatus, setBtStatus] = useState('');
   const [globalError, setGlobalError] = useState('');
   const [globalSuccess, setGlobalSuccess] = useState('');
 
-  const scannerInstanceRef = useRef(null);
+  const { scanning, startScanner, stopScanner } = useQrScanner();
+  const { weight, setWeight, btLoading, btStatus, triggerBluetoothWeigh } = useBluetoothScale();
   
   const load = async () => {
     try {
@@ -53,9 +52,6 @@ export default function DriverHome() {
 
   useEffect(() => {
     if (user) load();
-    return () => {
-      disconnectActiveDevice();
-    };
   }, [user, supabase]);
 
   const showSuccess = (msg) => { setGlobalSuccess(msg); setGlobalError(''); setTimeout(() => setGlobalSuccess(''), 4000); };
@@ -124,32 +120,16 @@ export default function DriverHome() {
     );
   };
 
-  const startScanner = async () => {
-    setScanning(true); setScannedBag(null); setWeight('');
+  const handleStartScanner = async () => {
+    setScannedBag(null); setWeight('');
     try {
-      const { Html5Qrcode } = await import('html5-qrcode');
-      const scanner = new Html5Qrcode('qr-reader');
-      scannerInstanceRef.current = scanner;
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        async (decodedText) => {
-          const bagId = parseQRPayload(decodedText) || decodedText;
-          await scanner.stop();
-          setScanning(false);
-          await lookupBag(bagId);
-        },
-        () => {}
-      );
+      await startScanner('qr-reader', async (decodedText) => {
+        const bagId = parseQRPayload(decodedText) || decodedText;
+        await lookupBag(bagId);
+      });
     } catch (err) {
       showError('Camera not working. Try manual entry.');
-      setScanning(false);
     }
-  };
-
-  const cancelScanner = async () => {
-    try { await scannerInstanceRef.current?.stop(); } catch (err) { logError('DriverHome.cancelScanner', err); }
-    setScanning(false);
   };
 
   const lookupBag = async (code) => {
@@ -164,29 +144,6 @@ export default function DriverHome() {
       triggerBluetoothWeigh();
     } catch (err) {
       showError(err.message);
-    }
-  };
-
-  const triggerBluetoothWeigh = () => {
-    if (isWebBluetoothSupported()) {
-      setBtLoading(true);
-      setBtStatus('Initializing Bluetooth...');
-      connectBluetoothScale(
-        (val) => {
-          setWeight(val);
-          setBtLoading(false);
-          setBtStatus('✅ Weight received successfully!');
-        },
-        (err) => {
-          setBtLoading(false);
-          setBtStatus(`❌ Bluetooth Error: ${err.message || err}`);
-        },
-        (statusText) => {
-          setBtStatus(`📶 ${statusText}`);
-        }
-      );
-    } else {
-      setBtStatus('❌ Bluetooth not supported in this browser.');
     }
   };
 
@@ -290,7 +247,7 @@ export default function DriverHome() {
                     <span style={{ fontSize: '2.5rem' }}>📱</span>
                   </div>
                   <h3 style={{ marginBottom: 24 }}>Scan Biomedical Waste Bag</h3>
-                  <button className="btn btn-primary btn-lg" onClick={startScanner} style={{ padding: '20px', width: '100%', fontSize: '1.1rem', borderRadius: 16 }}>
+                  <button className="btn btn-primary btn-lg" onClick={handleStartScanner} style={{ padding: '20px', width: '100%', fontSize: '1.1rem', borderRadius: 16 }}>
                     📸 Tap to Scan QR Array
                   </button>
                   <div style={{ marginTop: 24, padding: 16, background: 'var(--bg-secondary)', borderRadius: 12 }}>
@@ -303,8 +260,8 @@ export default function DriverHome() {
                 </>
               ) : (
                 <>
-                  <div id="qr-reader" ref={scannerInstanceRef} style={{ width: '100%', borderRadius: 12, overflow: 'hidden', marginBottom: 16 }} />
-                  <button className="btn btn-secondary" onClick={cancelScanner} style={{ width: '100%' }}>✕ Cancel Scan</button>
+                  <div id="qr-reader" style={{ width: '100%', borderRadius: 12, overflow: 'hidden', marginBottom: 16 }} />
+                  <button className="btn btn-secondary" onClick={stopScanner} style={{ width: '100%' }}>✕ Cancel Scan</button>
                 </>
               )}
             </div>
