@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchFilteredBags, createBags, lookupBagByBarcode } from '../../lib/api/bags';
+import { fetchFilteredBags, createBags, lookupBagByBarcode, insertScanEvent } from '../../lib/api/bags';
 
 describe('Bags API Module', () => {
   let mockSupabase;
@@ -116,6 +116,47 @@ describe('Bags API Module', () => {
       expect(mockSupabase.select).toHaveBeenCalledWith('*, hospitals(name, beds, district)');
       expect(mockSupabase.eq).toHaveBeenCalledWith('barcode', 'B1');
       expect(result.hospital_name).toBe('City Hosp');
+    });
+  });
+
+  describe('insertScanEvent', () => {
+    it('should insert a scan event with bag_id, barcode, and scan_type', async () => {
+      mockSupabase.single = vi.fn().mockReturnValue({
+        then: vi.fn((cb) => Promise.resolve(cb({
+          data: { id: 'se-1', bag_id: 'b1', barcode: 'B001', scan_type: 'collection' },
+          error: null
+        })))
+      });
+
+      const eventData = {
+        bag_id: 'b1',
+        barcode: 'B001',
+        scanned_by: 'u1',
+        scanner_name: 'Driver A',
+        scan_type: 'collection',
+        weight: 2.5,
+        gps_lat: 23.79,
+        gps_lng: 86.43,
+      };
+
+      const result = await insertScanEvent(mockSupabase, eventData);
+
+      expect(mockSupabase.from).toHaveBeenCalledWith('scan_events');
+      expect(mockSupabase.insert).toHaveBeenCalledWith(eventData);
+      expect(result.scan_type).toBe('collection');
+    });
+
+    it('should throw on insert error', async () => {
+      mockSupabase.single = vi.fn().mockReturnValue({
+        then: vi.fn((cb) => Promise.resolve(cb({
+          data: null,
+          error: { message: 'RLS policy violation' }
+        })))
+      });
+
+      await expect(
+        insertScanEvent(mockSupabase, { bag_id: 'b1' })
+      ).rejects.toThrow('RLS policy violation');
     });
   });
 });

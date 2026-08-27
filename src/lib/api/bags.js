@@ -91,3 +91,15 @@ export async function fetchBagsByBatch(supabase, batchId, organizationId = null)
   if (error) throw new Error(error.message);
   return data || [];
 }
+
+/**
+ * Insert a scan event record for bag tracking.
+ * @param {object} supabase - Supabase client instance
+ * @param {object} eventData - { bag_id, barcode, scanned_by, scanner_name, scan_type, weight?, gps_lat?, gps_lng?, route_id? }
+ */
+export async function insertScanEvent(supabase, eventData) {
+  const { data, error } = await supabase.from('scan_events').insert(eventData).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
