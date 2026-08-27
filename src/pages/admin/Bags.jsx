@@ -8,6 +8,7 @@ import { fetchFilteredBags, createBags } from '../../lib/api/bags';
 import { fetchAuditLogsByEntity, insertAuditLog } from '../../lib/api/auditLogs';
 import { bagSchema } from '../../lib/validation/schemas';
 import { branding } from '../../config/branding';
+import { logError } from '../../lib/errors';
 
 export default function Bags() {
   const { supabase, user } = useAuth();
@@ -26,7 +27,7 @@ export default function Bags() {
   useEffect(() => {
     fetchHospitals(supabase, user?.organization_id).then(data => {
       setHospitals(data);
-    }).catch(err => console.error(err));
+    }).catch(err => logError('AdminBags.fetchHospitals', err));
   }, [supabase, user]);
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export default function Bags() {
         });
         setData({ bags, total });
       } catch (err) {
-        console.error('Error loading bags:', err);
+        logError('AdminBags.loadBags', err);
       }
     }
     load();
@@ -52,7 +53,7 @@ export default function Bags() {
       const logs = await fetchAuditLogsByEntity(supabase, bag.id, user?.organization_id);
       setSelectedBag({ ...bag, scanHistory: logs.map(l => ({ action: l.action, timestamp: l.created_at })) });
     } catch (err) {
-      console.error(err);
+      logError('AdminBags.selectBag', err);
     }
   };
 

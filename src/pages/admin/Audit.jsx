@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { fetchAuditLogs } from '../../lib/api/auditLogs';
+import { logError } from '../../lib/errors';
 
 export default function Audit() {
   const { supabase, user } = useAuth();
@@ -17,7 +18,7 @@ export default function Audit() {
           total
         });
       } catch (err) {
-        console.error('Error loading audit logs:', err);
+        logError('AdminAudit.load', err);
       }
     }
     load();

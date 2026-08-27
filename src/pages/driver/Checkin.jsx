@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { fetchHospitals } from '../../lib/api/hospitals';
 import { insertAuditLog } from '../../lib/api/auditLogs';
 import { branding } from '../../config/branding';
+import { logError } from '../../lib/errors';
 
 export default function DriverCheckin() {
   const { supabase, user } = useAuth();
@@ -17,7 +18,7 @@ export default function DriverCheckin() {
   React.useEffect(() => {
     fetchHospitals(supabase, user?.organization_id).then(data => {
       setHospitals(data);
-    }).catch(err => console.error(err));
+    }).catch(err => logError('DriverCheckin.fetchHospitals', err));
   }, [supabase, user]);
 
   const captureGPS = () => {

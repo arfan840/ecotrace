@@ -4,6 +4,7 @@ import { fetchProfiles, updateProfile, deleteProfile } from '../../lib/api/profi
 import { fetchHospitals } from '../../lib/api/hospitals';
 import { profileSchema } from '../../lib/validation/schemas';
 import { branding } from '../../config/branding';
+import { logError } from '../../lib/errors';
 
 const ROLES = [
   { value: 'plant_head', label: 'Plant Head' },
@@ -27,7 +28,7 @@ export default function Users() {
   useEffect(() => {
     fetchHospitals(supabase, user?.organization_id).then(data => {
       setHospitals(data);
-    }).catch(err => console.error(err));
+    }).catch(err => logError('AdminUsers.fetchHospitals', err));
   }, [supabase, user]);
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export default function Users() {
         if (search) data = data.filter(u => u.name?.toLowerCase().includes(search.toLowerCase()));
         setUsers(data);
       } catch (err) {
-        console.error(err);
+        logError('AdminUsers.loadProfiles', err);
       }
     }
     load();

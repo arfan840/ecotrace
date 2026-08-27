@@ -4,6 +4,7 @@ import { fetchRoutes, closeRoute as closeRouteApi } from '../../lib/api/routes';
 import { fetchBagsByRoute } from '../../lib/api/bags';
 import { insertAuditLog } from '../../lib/api/auditLogs';
 import { branding } from '../../config/branding';
+import { logError } from '../../lib/errors';
 
 export default function DriverManifest() {
   const { supabase, user } = useAuth();
@@ -20,7 +21,7 @@ export default function DriverManifest() {
         const driverRoutes = data.filter(r => r.driver_id === user.id);
         setRoutes(driverRoutes.map(r => ({ ...r, vehicleNumber: r.vehicle_number, siteNames: ['Multiple Sites'], status: r.status })));
       } catch (err) {
-        console.error(err);
+        logError('DriverManifest.loadRoutes', err);
       }
     }
     load();
@@ -33,7 +34,7 @@ export default function DriverManifest() {
       const collectedBags = data.filter(b => b.status === 'collected');
       setRouteBags(collectedBags);
     } catch (err) {
-      console.error(err);
+      logError('DriverManifest.viewRoute', err);
     }
   };
 

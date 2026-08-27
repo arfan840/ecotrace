@@ -4,6 +4,7 @@ import { fetchHospitals, createHospital, updateHospital, deleteHospital } from '
 import { insertAuditLog } from '../../lib/api/auditLogs';
 import { hospitalSchema } from '../../lib/validation/schemas';
 import { branding } from '../../config/branding';
+import { logError } from '../../lib/errors';
 
 export default function Hospitals() {
   const { supabase, user } = useAuth();
@@ -24,7 +25,7 @@ export default function Hospitals() {
       const data = await fetchHospitals(supabase, user?.organization_id);
       setHospitals(data);
     } catch (err) {
-      console.error('Error loading hospitals:', err);
+      logError('AdminHospitals.load', err);
     }
   };
 
@@ -89,7 +90,7 @@ export default function Hospitals() {
       await load();
       setShowModal(false);
     } catch (err) {
-      console.error('Save error:', err);
+      logError('AdminHospitals.handleSave', err);
       alert('Error: ' + err.message);
     } finally {
       setSaving(false);

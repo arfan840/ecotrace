@@ -6,6 +6,7 @@ import { fetchHospitals } from '../../lib/api/hospitals';
 import { fetchBatches } from '../../lib/api/batches';
 import { fetchBagsByBatch } from '../../lib/api/bags';
 import { branding } from '../../config/branding';
+import { logError } from '../../lib/errors';
 
 export default function Certificates() {
   const { supabase, user } = useAuth();
@@ -84,7 +85,7 @@ export default function Certificates() {
           setBatches(formattedBatches.filter(b => b.certificate));
         }
       } catch (err) {
-        console.error(err);
+        logError('AdminCertificates.loadResources', err);
       } finally {
         setLoading(false);
       }

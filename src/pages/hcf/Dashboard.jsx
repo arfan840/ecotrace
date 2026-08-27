@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { logError } from '../../lib/errors';
 
 export default function HcfDashboard() {
   const { supabase, user } = useAuth();
@@ -50,7 +51,7 @@ export default function HcfDashboard() {
         total: bagData.length
       });
     } catch (err) {
-      console.error(err);
+      logError('HcfDashboard.loadData', err);
       setError(err.message || 'Error loading HCF dashboard details.');
     } finally {
       setLoading(false);

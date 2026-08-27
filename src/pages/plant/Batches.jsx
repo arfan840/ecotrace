@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { logError } from '../../lib/errors';
 
 export default function PlantBatches() {
   const { supabase, user } = useAuth();
@@ -47,14 +48,14 @@ export default function PlantBatches() {
       }).select().single();
       
       if (error) {
-        console.error('Batch Create Error:', error);
+        logError('PlantBatches.createBatch', error);
         throw new Error(`Batch Creation Failed: ${error.message}`);
       }
       if (!batch) throw new Error('Batch Creation Failed: No data returned from database.');
 
       const { error: updateError } = await supabase.from('bags').update({ status: 'in_batch', batch_id: batch.id }).in('id', bags.map(b => b.id));
       if (updateError) {
-        console.error('Bags Update Error:', updateError);
+        logError('PlantBatches.linkBags', updateError);
         throw new Error(`Batch created, but failed to link bags: ${updateError.message}`);
       }
 

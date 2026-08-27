@@ -5,6 +5,7 @@ import { fetchProfiles } from '../../lib/api/profiles';
 import { insertAuditLog } from '../../lib/api/auditLogs';
 import { vehicleSchema } from '../../lib/validation/schemas';
 import { branding } from '../../config/branding';
+import { logError } from '../../lib/errors';
 
 export default function Vehicles() {
   const { supabase, user } = useAuth();
@@ -25,7 +26,7 @@ export default function Vehicles() {
       setVehicles(vData);
       setDrivers(allProfiles.filter(p => p.role === 'driver'));
     } catch (err) {
-      console.error(err);
+      logError('AdminVehicles.load', err);
     }
   };
 

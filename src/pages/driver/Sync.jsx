@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { getQueue, clearQueue, syncQueue } from '../../lib/offlineQueue';
+import { logError } from '../../lib/errors';
 
 export default function DriverSync() {
   const { supabase, user } = useAuth();
@@ -38,7 +39,7 @@ export default function DriverSync() {
       setMessage(`✅ Successfully synced ${processedCount} operational records!`);
       setTimeout(() => setMessage(''), 4000);
     } catch (err) {
-      console.error(err);
+      logError('DriverSync.handleSyncAll', err);
       setMessage(`❌ Sync error: ${err.message}`);
     } finally {
       setSyncing(false);

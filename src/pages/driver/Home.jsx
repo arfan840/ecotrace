@@ -44,7 +44,7 @@ export default function DriverHome() {
         setVehicles(v.filter(vehicle => vehicle.status === 'active'));
       }
     } catch (err) {
-      console.error('Error loading driver dashboard:', err);
+      logError('DriverHome.load', err);
     } finally {
       setLoading(false);
     }
