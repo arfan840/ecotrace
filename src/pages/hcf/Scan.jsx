@@ -6,6 +6,8 @@ import { logError } from '../../lib/errors';
 import useQrScanner from '../../hooks/useQrScanner';
 import useBluetoothScale from '../../hooks/useBluetoothScale';
 import { isWebBluetoothSupported } from '../../lib/bluetoothScale';
+import { lookupBagByBarcode, updateBagStatus, insertScanEvent } from '../../lib/api/bags';
+import { insertAuditLog } from '../../lib/api/auditLogs';
 
 export default function HcfScan() {
   const { supabase, user } = useAuth();
@@ -61,13 +63,9 @@ export default function HcfScan() {
     }
     setError(''); setScannedBag(null);
     try {
-      const { data, error: err } = await supabase
-        .from('bags')
-        .select('*')
-        .eq('barcode', code.trim().toUpperCase())
-        .single();
+      const data = await lookupBagByBarcode(supabase, code.trim().toUpperCase(), user?.organization_id);
 
-      if (err || !data) {
+      if (!data) {
         showError(`Bag not found in database: ${code}`);
         return;
       }
@@ -126,23 +124,17 @@ export default function HcfScan() {
       const selectedRoute = activeRoutes.find(r => r.id === selectedRouteId);
 
       // Update bag status
-      const { error: bagUpdateErr } = await supabase
-        .from('bags')
-        .update({
-          status: 'collected',
-          weight: w,
-          collected_at: new Date().toISOString(),
-          collected_by: user.id,
-          gps_lat: gpsLat,
-          gps_lng: gpsLng,
-          route_id: selectedRouteId
-        })
-        .eq('id', scannedBag.id);
-
-      if (bagUpdateErr) throw bagUpdateErr;
+      await updateBagStatus(supabase, scannedBag.id, 'collected', {
+        weight: w,
+        collected_at: new Date().toISOString(),
+        collected_by: user.id,
+        gps_lat: gpsLat,
+        gps_lng: gpsLng,
+        route_id: selectedRouteId
+      }, user?.organization_id);
 
       // Insert scan event
-      await supabase.from('scan_events').insert({
+      await insertScanEvent(supabase, {
         bag_id: scannedBag.id,
         barcode: scannedBag.barcode,
         scanned_by: user.id,
@@ -155,14 +147,14 @@ export default function HcfScan() {
       });
 
       // Insert audit log
-      await supabase.from('audit_logs').insert({
-        user_id: user.id,
-        user_name: user.name,
+      await insertAuditLog(supabase, {
+        userId: user.id,
+        userName: user.name,
         action: 'BAG_DISPATCHED_BY_HCF',
         entity: 'BAG',
         entity_id: scannedBag.id,
         details: `Bag ${scannedBag.barcode} weighed (${w} kg) and dispatched by HCF staff to vehicle ${selectedRoute?.vehicle_number || ''}`
-      });
+      }, user?.organization_id);
 
       showSuccess(`✅ Bag ${scannedBag.barcode} successfully dispatched to route!`);
       setScannedBag(null);
