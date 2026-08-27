@@ -4,6 +4,8 @@ import { parseQRPayload } from '../../lib/qrGenerator';
 import { isWebBluetoothSupported } from '../../lib/bluetoothScale';
 import useQrScanner from '../../hooks/useQrScanner';
 import useBluetoothScale from '../../hooks/useBluetoothScale';
+import { lookupBagByBarcode, updateBagStatus, insertScanEvent } from '../../lib/api/bags';
+import { insertAuditLog } from '../../lib/api/auditLogs';
 
 export default function PlantGateScan() {
   const { supabase, user } = useAuth();
@@ -36,8 +38,8 @@ export default function PlantGateScan() {
 
     processingRef.current = true;
     try {
-      const { data, error: err } = await supabase.from('bags').select('*').eq('barcode', bagId).single();
-      if (err || !data) { setError(`Not found: ${bagId}`); return; }
+      const data = await lookupBagByBarcode(supabase, bagId, user?.organization_id);
+      if (!data) { setError(`Not found: ${bagId}`); return; }
       if (data.status === 'received' || data.status === 'in_batch' || data.status === 'treated') {
         setError(`Bag ${bagId} already received`);
         return;
@@ -91,14 +93,15 @@ export default function PlantGateScan() {
       
       // Batch update bag status and gate_weight if applicable
       for (const b of scanned) {
-        const updateData = { status: 'received', received_at: now, received_by: user?.id };
+        const updateData = { received_at: now, received_by: user?.id };
         if (b.gate_weight) {
           updateData.received_weight = b.gate_weight; // Store weight received at gate
         }
-        await supabase.from('bags').update(updateData).eq('id', b.id);
+        await updateBagStatus(supabase, b.id, 'received', updateData, user?.organization_id);
       }
 
-      await supabase.from('scan_events').insert(
+      await insertScanEvent(
+        supabase,
         scanned.map(b => ({
           bag_id: b.id, barcode: b.barcode,
           scanned_by: user?.id, scanner_name: user?.name,
@@ -107,11 +110,13 @@ export default function PlantGateScan() {
         }))
       );
 
-      supabase.from('audit_logs').insert({
-        user_id: user?.id, user_name: user?.name,
-        action: 'GATE_SCAN_COMPLETE', entity: 'BAG',
+      insertAuditLog(supabase, {
+        userId: user?.id,
+        userName: user?.name,
+        action: 'GATE_SCAN_COMPLETE',
+        entity: 'BAG',
         details: `${scanned.length} bags received at gate (${scanMode} mode)`,
-      }).then();
+      }, user?.organization_id).then();
 
       setSuccess(`✅ ${scanned.length} bags marked as received!`);
       setTimeout(() => setSuccess(''), 4000);
