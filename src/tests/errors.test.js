@@ -21,24 +21,26 @@ describe('Centralized Error Handling System', () => {
   });
 
   it('should format and log simple string errors', () => {
-    const logMsg = logError('AuthModule', 'Invalid session key');
+    const logObj = logError('AuthModule', 'Invalid session key');
     
-    expect(logMsg).toContain('[ERROR]');
-    expect(logMsg).toContain('[Context: AuthModule]');
-    expect(logMsg).toContain('Invalid session key');
+    expect(logObj.level).toBe('error');
+    expect(logObj.context).toBe('AuthModule');
+    expect(logObj.msg).toBe('Invalid session key');
     expect(consoleSpy).toHaveBeenCalledTimes(1);
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Invalid session key'),
-      expect.any(Object)
+      expect.stringContaining('"msg":"Invalid session key"')
     );
   });
 
   it('should format and log Error instances', () => {
     const testError = new TypeError('Cannot read properties of undefined');
-    const logMsg = logError('BagsAPI', testError);
+    const logObj = logError('BagsAPI', testError);
     
-    expect(logMsg).toContain('[Context: BagsAPI]');
-    expect(logMsg).toContain('Cannot read properties of undefined');
+    expect(logObj.context).toBe('BagsAPI');
+    expect(logObj.msg).toBe('Cannot read properties of undefined');
     expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('"context":"BagsAPI"')
+    );
   });
 });

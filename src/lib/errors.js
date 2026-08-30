@@ -14,23 +14,29 @@ export class AppError extends Error {
 }
 
 /**
- * Formats and outputs errors.
+ * Formats and outputs errors in a structured JSON format (Pino-like structure).
  * Centralizing this enables future connection to remote logging providers (e.g. Sentry).
  * @param {string} contextName - The component or module where the error occurred
  * @param {Error|AppError|string} err - The error object or message
+ * @returns {Object} The structured log object
  */
 export function logError(contextName, err) {
   const errorObj = err instanceof Error ? err : new Error(String(err));
   const timestamp = new Date().toISOString();
   
-  const logMessage = `[ERROR] [${timestamp}] [Context: ${contextName}] - Message: ${errorObj.message}`;
+  const logStructure = {
+    level: 'error',
+    time: timestamp,
+    context: contextName,
+    msg: errorObj.message,
+    stack: errorObj.stack || '',
+    details: err instanceof AppError ? err.context : {},
+    statusCode: err instanceof AppError ? err.statusCode : 500
+  };
   
-  // Output warning/error depending on environment or severity
-  // Using console.error directly is allowed here as this is our central logger
-  console.error(logMessage, {
-    stack: errorObj.stack,
-    context: err instanceof AppError ? err.context : {},
-  });
+  // Output structured JSON object
+  console.error(JSON.stringify(logStructure));
   
-  return logMessage;
+  return logStructure;
 }
+

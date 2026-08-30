@@ -6,13 +6,12 @@ describe('Error Handling Integration', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const sampleError = new Error('Network query timed out');
 
-    const msg = logError('AdminBags.loadBags', sampleError);
+    const logObj = logError('AdminBags.loadBags', sampleError);
 
-    expect(msg).toContain('[Context: AdminBags.loadBags]');
-    expect(msg).toContain('Message: Network query timed out');
+    expect(logObj.context).toBe('AdminBags.loadBags');
+    expect(logObj.msg).toBe('Network query timed out');
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[Context: AdminBags.loadBags]'),
-      expect.objectContaining({ stack: expect.any(String), context: {} })
+      expect.stringContaining('"context":"AdminBags.loadBags"')
     );
 
     errorSpy.mockRestore();
@@ -22,13 +21,12 @@ describe('Error Handling Integration', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const appErr = new AppError('Resource not found', { id: 'bag-123' }, 404);
 
-    const msg = logError('PlantGateScan.processCode', appErr);
+    const logObj = logError('PlantGateScan.processCode', appErr);
 
-    expect(msg).toContain('[Context: PlantGateScan.processCode]');
-    expect(msg).toContain('Message: Resource not found');
+    expect(logObj.context).toBe('PlantGateScan.processCode');
+    expect(logObj.msg).toBe('Resource not found');
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[Context: PlantGateScan.processCode]'),
-      expect.objectContaining({ context: { id: 'bag-123' } })
+      expect.stringContaining('"context":"PlantGateScan.processCode"')
     );
 
     expect(appErr.statusCode).toBe(404);

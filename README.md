@@ -50,9 +50,9 @@ npm run test
 ```
 
 ### Test Coverage Reports
-Executes test coverage checks using the `v8` provider. Enforces a 40% statement coverage build gate.
+Executes test coverage checks using the `v8` provider. Enforces 60% statement, branch, functions, and lines coverage build gates.
 ```bash
-npm run test -- --coverage
+npm run coverage
 ```
 
 ### Code Formatting and Linting
@@ -66,3 +66,24 @@ Builds minified, optimized production assets to the `dist/` directory.
 ```bash
 npm run build
 ```
+
+---
+
+## 3. Observability & Logging
+
+EcoTrace uses a centralized, structured JSON error logging framework located in `src/lib/errors.js`. All errors caught in UI components or data access layers are formatted into structured logs and emitted via `console.error` in JSON string format:
+
+```json
+{
+  "level": "error",
+  "time": "2026-08-30T13:00:00.000Z",
+  "context": "AdminBags.loadBags",
+  "msg": "Network query timed out",
+  "stack": "Error: Network query timed out\n    at ...",
+  "details": {},
+  "statusCode": 500
+}
+```
+
+This structure is compatible with cloud aggregators (e.g. Datadog, AWS CloudWatch, Sentry) and enables reliable multi-tenant audit observability.
+
