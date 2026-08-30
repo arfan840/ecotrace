@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { logError } from '../../lib/errors';
+import { fetchRoutes } from '../../lib/api/routes';
+import { fetchBagsByRoute } from '../../lib/api/bags';
+import { createDiscrepancy as createDiscrepancyApi } from '../../lib/api/discrepancies';
+import { insertAuditLog } from '../../lib/api/auditLogs';
 
 export default function PlantReconciliation() {
   const { supabase, user } = useAuth();
@@ -10,18 +15,21 @@ export default function PlantReconciliation() {
   const [resolving, setResolving] = useState(null);
 
   useEffect(() => {
-    supabase.from('routes').select('*, profiles(name)').order('date', { ascending: false }).limit(50)
-      .then(({ data }) => { if (data) setRoutes(data); });
+    fetchRoutes(supabase, user?.organization_id)
+      .then(data => setRoutes(data.slice(0, 50)))
+      .catch(err => logError('PlantReconciliation.fetchRoutes', err));
   }, [supabase]);
 
   const viewRoute = async (route) => {
     setSelected(route);
     setLoading(true);
     try {
-      const { data: bags } = await supabase.from('bags').select('*').eq('route_id', route.id);
-      const collected = bags?.filter(b => ['collected', 'received', 'in_batch', 'treated'].includes(b.status)) || [];
-      const received = bags?.filter(b => ['received', 'in_batch', 'treated'].includes(b.status)) || [];
-      setDetails({ collected, received, allBags: bags || [] });
+      const bags = await fetchBagsByRoute(supabase, route.id, user?.organization_id);
+      const collected = bags.filter(b => ['collected', 'received', 'in_batch', 'treated'].includes(b.status));
+      const received = bags.filter(b => ['received', 'in_batch', 'treated'].includes(b.status));
+      setDetails({ collected, received, allBags: bags });
+    } catch (err) {
+      logError('PlantReconciliation.viewRoute', err);
     } finally {
       setLoading(false);
     }
@@ -30,13 +38,21 @@ export default function PlantReconciliation() {
   const createDiscrepancy = async (bag, type) => {
     setResolving(bag.id);
     try {
-      await supabase.from('discrepancies').insert({
-        bag_id: bag.id, barcode: bag.barcode, type,
+      await createDiscrepancyApi(supabase, {
+        bagId: bag.id, barcode: bag.barcode, type,
         description: type === 'missing' ? `Bag collected but not received at plant` : `Bag received at plant but no collection record`,
-        route_id: selected?.id, status: 'open',
-      });
-      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'DISCREPANCY_CREATED', entity: 'BAG', entity_id: bag.id, details: `${type} discrepancy for ${bag.barcode}` }).then();
+        routeId: selected?.id,
+      }, user?.organization_id);
+
+      insertAuditLog(supabase, {
+        userId: user?.id, userName: user?.name,
+        action: 'DISCREPANCY_CREATED', entity: 'BAG', entityId: bag.id,
+        details: `${type} discrepancy for ${bag.barcode}`
+      }, user?.organization_id).catch(err => logError('PlantReconciliation.insertAuditLog', err));
+
       alert(`Discrepancy logged for ${bag.barcode}`);
+    } catch (err) {
+      logError('PlantReconciliation.createDiscrepancy', err);
     } finally {
       setResolving(null);
     }
