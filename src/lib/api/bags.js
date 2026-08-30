@@ -98,8 +98,32 @@ export async function fetchBagsByBatch(supabase, batchId, organizationId = null)
  * @param {object} eventData - { bag_id, barcode, scanned_by, scanner_name, scan_type, weight?, gps_lat?, gps_lng?, route_id? }
  */
 export async function insertScanEvent(supabase, eventData) {
-  const { data, error } = await supabase.from('scan_events').insert(eventData).select().single();
+  let query = supabase.from('scan_events').insert(eventData).select();
+  if (!Array.isArray(eventData)) {
+    query = query.single();
+  }
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data;
+}
+
+export async function fetchBagsByStatus(supabase, status, organizationId = null) {
+  let query = supabase.from('bags').select('*').eq('status', status).order('received_at', { ascending: false });
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId);
+  }
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function linkBagsToBatch(supabase, bagIds, batchId, organizationId = null) {
+  let query = supabase.from('bags').update({ status: 'in_batch', batch_id: batchId }).in('id', bagIds);
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId);
+  }
+  const { data, error } = await query.select();
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 

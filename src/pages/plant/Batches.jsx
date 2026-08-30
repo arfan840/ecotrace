@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { logError } from '../../lib/errors';
+import { fetchBatches, createBatch as createBatchApi } from '../../lib/api/batches';
+import { fetchBagsByStatus, linkBagsToBatch } from '../../lib/api/bags';
+import { insertAuditLog } from '../../lib/api/auditLogs';
 
 export default function PlantBatches() {
   const { supabase, user } = useAuth();
@@ -14,12 +17,16 @@ export default function PlantBatches() {
   const [colorFilter, setColorFilter] = useState('');
 
   const load = async () => {
-    const [{ data: b }, { data: bags }] = await Promise.all([
-      supabase.from('batches').select('*').order('created_at', { ascending: false }),
-      supabase.from('bags').select('*').eq('status', 'received').order('received_at', { ascending: false }),
-    ]);
-    if (b) setBatches(b);
-    if (bags) setAvailBags(bags);
+    try {
+      const [b, bags] = await Promise.all([
+        fetchBatches(supabase, user?.organization_id),
+        fetchBagsByStatus(supabase, 'received', user?.organization_id),
+      ]);
+      setBatches(b);
+      setAvailBags(bags);
+    } catch (err) {
+      logError('PlantBatches.load', err);
+    }
   };
 
   useEffect(() => { load(); }, [supabase]);
@@ -38,28 +45,23 @@ export default function PlantBatches() {
       const totalWeight = bags.reduce((s, b) => s + (b.weight || 0), 0);
       const batchNum = `BATCH-${Date.now()}`;
 
-      const { data: batch, error } = await supabase.from('batches').insert({
-        batch_number: batchNum,
-        bag_count: bags.length,
-        total_weight: Number(totalWeight.toFixed(3)) || 0,
-        treatment_type: treatmentType,
+      const batch = await createBatchApi(supabase, {
+        batchNumber: batchNum,
+        bagCount: bags.length,
+        totalWeight: Number(totalWeight.toFixed(3)) || 0,
+        treatmentType,
         operator: user?.name || 'Unknown',
-        status: 'pending',
-      }).select().single();
-      
-      if (error) {
-        logError('PlantBatches.createBatch', error);
-        throw new Error(`Batch Creation Failed: ${error.message}`);
-      }
+      }, user?.organization_id);
+
       if (!batch) throw new Error('Batch Creation Failed: No data returned from database.');
 
-      const { error: updateError } = await supabase.from('bags').update({ status: 'in_batch', batch_id: batch.id }).in('id', bags.map(b => b.id));
-      if (updateError) {
-        logError('PlantBatches.linkBags', updateError);
-        throw new Error(`Batch created, but failed to link bags: ${updateError.message}`);
-      }
+      await linkBagsToBatch(supabase, bags.map(b => b.id), batch.id, user?.organization_id);
 
-      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'BATCH_CREATED', entity: 'BATCH', entity_id: batch.id, details: `Batch ${batchNum} created with ${bags.length} bags, ${totalWeight.toFixed(3)} kg, treatment: ${treatmentType}` }).then();
+      insertAuditLog(supabase, {
+        userId: user?.id, userName: user?.name,
+        action: 'BATCH_CREATED', entity: 'BATCH', entityId: batch.id,
+        details: `Batch ${batchNum} created with ${bags.length} bags, ${totalWeight.toFixed(3)} kg, treatment: ${treatmentType}`
+      }, user?.organization_id).catch(err => logError('PlantBatches.insertAuditLog', err));
 
       setShowCreate(false);
       setSelectedBags(new Set());
