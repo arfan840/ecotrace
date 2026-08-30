@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { logError } from '../../lib/errors';
+import { fetchHospitalsForFilters, fetchFilteredHospitals, fetchBagsForReport } from '../../lib/api/reports';
 
 const CATEGORIES = ['Yellow', 'Red', 'Blue', 'White'];
 
@@ -120,7 +122,7 @@ function ReportTable({ data, filters }) {
 }
 
 export default function Reports() {
-  const { supabase } = useAuth();
+  const { supabase, user } = useAuth();
   const today = new Date().toISOString().split('T')[0];
   const thisMonth = today.slice(0, 7);
   const thisYear = today.slice(0, 4);
@@ -135,25 +137,24 @@ export default function Reports() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    supabase.from('hospitals').select('id, name, district').order('name').then(({ data }) => {
-      if (data) {
+    fetchHospitalsForFilters(supabase, user?.organization_id)
+      .then(data => {
         setHospitals(data);
         setDistricts([...new Set(data.map(h => h.district).filter(Boolean))].sort());
-      }
-    });
+      })
+      .catch(err => logError('Reports.fetchHospitals', err));
   }, [supabase]);
 
   const generateReport = useCallback(async () => {
     setLoading(true);
     try {
       // Fetch hospitals matching filters
-      let hQuery = supabase.from('hospitals').select('id, name, type, bedded, district');
-      if (filters.hospital_id) hQuery = hQuery.eq('id', filters.hospital_id);
-      if (filters.district) hQuery = hQuery.ilike('district', `%${filters.district}%`);
-      if (filters.hospital_type === 'bedded') hQuery = hQuery.eq('bedded', true);
-      if (filters.hospital_type === 'non_bedded') hQuery = hQuery.eq('bedded', false);
-      const { data: hcfs } = await hQuery;
-      if (!hcfs || hcfs.length === 0) { setReportData([]); setLoading(false); return; }
+      const hcfs = await fetchFilteredHospitals(supabase, {
+        hospital_id: filters.hospital_id,
+        district: filters.district,
+        hospital_type: filters.hospital_type,
+      }, user?.organization_id);
+      if (hcfs.length === 0) { setReportData([]); setLoading(false); return; }
 
       // Date range
       let startDate, endDate;
@@ -171,11 +172,10 @@ export default function Reports() {
       }
 
       // Fetch bags for these hospitals in date range
-      let bQuery = supabase.from('bags').select('hospital_id, hospital_name, category, weight, received_weight, status, created_at, received_at');
-      bQuery = bQuery.in('hospital_id', hcfs.map(h => h.id));
-      bQuery = bQuery.gte('created_at', startDate).lte('created_at', endDate);
-      if (filters.category) bQuery = bQuery.eq('category', filters.category);
-      const { data: bags } = await bQuery;
+      const bags = await fetchBagsForReport(
+        supabase, hcfs.map(h => h.id), startDate, endDate,
+        filters.category || null, user?.organization_id
+      );
 
       // Aggregate by hospital
       const hcfMap = {};
@@ -184,7 +184,7 @@ export default function Reports() {
         CATEGORIES.forEach(cat => { hcfMap[h.id][cat] = { gen_bags: 0, gen_weight: 0, rec_bags: 0, rec_weight: 0 }; });
       });
 
-      (bags || []).forEach(b => {
+      bags.forEach(b => {
         const row = hcfMap[b.hospital_id];
         if (!row) return;
         const cat = b.category;
@@ -202,6 +202,8 @@ export default function Reports() {
       });
 
       setReportData(Object.values(hcfMap));
+    } catch (err) {
+      logError('Reports.generateReport', err);
     } finally {
       setLoading(false);
     }
