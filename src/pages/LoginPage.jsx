@@ -12,8 +12,7 @@ import {
   connectBluetoothScale, 
   disconnectActiveDevice, 
   isScaleConnected, 
-  getConnectedDeviceName,
-  simulateWeightFetch
+  getConnectedDeviceName
 } from '../lib/bluetoothScale';
 
 export default function LoginPage() {
