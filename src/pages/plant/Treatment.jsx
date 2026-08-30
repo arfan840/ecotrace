@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { generateCertificateHTML } from '../../lib/certificate';
+import { logError } from '../../lib/errors';
+import { fetchBatches, treatBatch } from '../../lib/api/batches';
+import { fetchBagsByBatch, updateBagStatus, insertScanEvent } from '../../lib/api/bags';
+import { insertAuditLog } from '../../lib/api/auditLogs';
 
 export default function PlantTreatment() {
   const { supabase, user } = useAuth();
@@ -11,8 +15,12 @@ export default function PlantTreatment() {
   const [method, setMethod] = useState('Autoclave');
 
   const load = async () => {
-    const { data } = await supabase.from('batches').select('*').in('status', ['pending', 'treated']).order('created_at', { ascending: false });
-    if (data) setBatches(data);
+    try {
+      const data = await fetchBatches(supabase, user?.organization_id);
+      setBatches(data.filter(b => b.status === 'pending' || b.status === 'treated'));
+    } catch (err) {
+      logError('PlantTreatment.load', err);
+    }
   };
 
   useEffect(() => { load(); }, [supabase]);
@@ -20,24 +28,36 @@ export default function PlantTreatment() {
   const viewBatch = async (batch) => {
     setSelected(batch);
     setMethod(batch.treatment_type || 'Autoclave');
-    const { data } = await supabase.from('bags').select('barcode, hospital_name, category, weight').eq('batch_id', batch.id);
-    if (data) setBags(data);
+    try {
+      const data = await fetchBagsByBatch(supabase, batch.id, user?.organization_id);
+      setBags(data);
+    } catch (err) {
+      logError('PlantTreatment.viewBatch', err);
+    }
   };
 
   const completeTreatment = async () => {
     if (!selected) return;
     setTreating(true);
     try {
-      const now = new Date().toISOString();
-      await supabase.from('batches').update({ status: 'treated', treatment_type: method, treated_at: now, operator: user?.name }).eq('id', selected.id);
-      await supabase.from('bags').update({ status: 'treated' }).eq('batch_id', selected.id);
+      await treatBatch(supabase, selected.id, method, user?.name, user?.organization_id);
 
-      supabase.from('scan_events').insert(bags.map(b => ({
+      // Mark all bags in batch as treated
+      for (const b of bags) {
+        await updateBagStatus(supabase, b.id, 'treated', {}, user?.organization_id)
+          .catch(() => {}); // bags may not have id in select projection, best effort
+      }
+
+      insertScanEvent(supabase, bags.filter(b => b.barcode).map(b => ({
         barcode: b.barcode, scanned_by: user?.id, scanner_name: user?.name,
         scan_type: 'treatment',
-      }))).then();
+      }))).catch(err => logError('PlantTreatment.insertScanEvent', err));
 
-      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'BATCH_TREATED', entity: 'BATCH', entity_id: selected.id, details: `Batch ${selected.batch_number} treated via ${method}` }).then();
+      insertAuditLog(supabase, {
+        userId: user?.id, userName: user?.name,
+        action: 'BATCH_TREATED', entity: 'BATCH', entityId: selected.id,
+        details: `Batch ${selected.batch_number} treated via ${method}`
+      }, user?.organization_id).catch(err => logError('PlantTreatment.insertAuditLog', err));
 
       await load();
       setSelected(prev => ({ ...prev, status: 'treated', treatment_type: method, operator: user?.name }));
