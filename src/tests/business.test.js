@@ -166,6 +166,38 @@ describe('Disposal Certificate Formatting', () => {
     expect(html).toContain('Mock Operator');
     expect(html).toContain('Disposal Certificate');
   });
+
+  it('should generate printable HTML with camelCase columns and category breakdown', () => {
+    const mockBatch = {
+      id: 'batch-1234-abcd',
+      batchNumber: 'B-2026-08-02',
+      treatmentType: 'Incineration',
+      bagCount: 20,
+      totalWeight: 50.1,
+      treatedAt: '2026-08-26T12:00:00Z',
+    };
+    const breakdown = {
+      Yellow: { count: 10, weight: 25.5 },
+      Red: { count: 5, weight: 12.3 },
+      White: { count: 3, weight: 6.2 },
+      Blue: { count: 2, weight: 6.1 }
+    };
+    const html = generateCertificateHTML(mockBatch, '', breakdown);
+    expect(html).toContain('B-2026-08-02');
+    expect(html).toContain('Incineration');
+    expect(html).toContain('50.10 kg');
+    expect(html).toContain('System Operator');
+    expect(html).toContain('10');
+    expect(html).toContain('25.50 kg');
+  });
+
+  it('should fallback to defaults when properties are missing', () => {
+    const html = generateCertificateHTML({});
+    expect(html).toContain('—');
+    expect(html).toContain('Autoclave');
+    expect(html).toContain('0.00 kg');
+    expect(html).toContain('System Operator');
+  });
 });
 
 describe('Facility Dispatch Rules', () => {

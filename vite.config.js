@@ -28,7 +28,10 @@ export default defineConfig({
         'src/lib/validation/schemas.js'
       ],
       thresholds: {
-        statements: 40
+        statements: 60,
+        branches: 50,
+        functions: 60,
+        lines: 60
       }
     }
   }

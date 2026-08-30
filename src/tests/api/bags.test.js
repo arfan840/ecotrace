@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchFilteredBags, createBags, lookupBagByBarcode, insertScanEvent } from '../../lib/api/bags';
+import { fetchFilteredBags, createBags, lookupBagByBarcode, insertScanEvent, updateBagStatus, fetchBagsByRoute, fetchBagsByBatch, fetchBagsByStatus, linkBagsToBatch } from '../../lib/api/bags';
 
 describe('Bags API Module', () => {
   let mockSupabase;
@@ -11,6 +11,7 @@ describe('Bags API Module', () => {
     mockSupabase.insert = vi.fn().mockReturnValue(mockSupabase);
     mockSupabase.update = vi.fn().mockReturnValue(mockSupabase);
     mockSupabase.eq = vi.fn().mockReturnValue(mockSupabase);
+    mockSupabase.in = vi.fn().mockReturnValue(mockSupabase);
     mockSupabase.or = vi.fn().mockReturnValue(mockSupabase);
     mockSupabase.range = vi.fn().mockReturnValue(mockSupabase);
     mockSupabase.order = vi.fn().mockReturnValue(mockSupabase);
@@ -157,6 +158,85 @@ describe('Bags API Module', () => {
       await expect(
         insertScanEvent(mockSupabase, { bag_id: 'b1' })
       ).rejects.toThrow('RLS policy violation');
+    });
+  });
+
+  describe('updateBagStatus', () => {
+    it('should update bag status correctly', async () => {
+      mockSupabase.single = vi.fn().mockReturnValue({
+        then: vi.fn((cb) => Promise.resolve(cb({
+          data: { id: 'bag1', status: 'collected' },
+          error: null
+        })))
+      });
+
+      const res = await updateBagStatus(mockSupabase, 'bag1', 'collected', { weight: 5.5 }, 'org1');
+      expect(mockSupabase.from).toHaveBeenCalledWith('bags');
+      expect(mockSupabase.update).toHaveBeenCalledWith({ status: 'collected', weight: 5.5 });
+      expect(mockSupabase.eq).toHaveBeenCalledWith('id', 'bag1');
+      expect(mockSupabase.eq).toHaveBeenCalledWith('organization_id', 'org1');
+      expect(res.status).toBe('collected');
+    });
+  });
+
+  describe('fetchBagsByRoute', () => {
+    it('should fetch bags matching route id', async () => {
+      mockSupabase.then = vi.fn((cb) => Promise.resolve(cb({
+        data: [{ id: 'bag1', route_id: 'route1' }],
+        error: null
+      })));
+
+      const res = await fetchBagsByRoute(mockSupabase, 'route1', 'org1');
+      expect(mockSupabase.from).toHaveBeenCalledWith('bags');
+      expect(mockSupabase.eq).toHaveBeenCalledWith('route_id', 'route1');
+      expect(mockSupabase.eq).toHaveBeenCalledWith('organization_id', 'org1');
+      expect(res).toHaveLength(1);
+    });
+  });
+
+  describe('fetchBagsByBatch', () => {
+    it('should fetch bags matching batch id', async () => {
+      mockSupabase.then = vi.fn((cb) => Promise.resolve(cb({
+        data: [{ id: 'bag1', batch_id: 'batch1' }],
+        error: null
+      })));
+
+      const res = await fetchBagsByBatch(mockSupabase, 'batch1', 'org1');
+      expect(mockSupabase.from).toHaveBeenCalledWith('bags');
+      expect(mockSupabase.eq).toHaveBeenCalledWith('batch_id', 'batch1');
+      expect(mockSupabase.eq).toHaveBeenCalledWith('organization_id', 'org1');
+      expect(res).toHaveLength(1);
+    });
+  });
+
+  describe('fetchBagsByStatus', () => {
+    it('should fetch bags matching status', async () => {
+      mockSupabase.then = vi.fn((cb) => Promise.resolve(cb({
+        data: [{ id: 'bag1', status: 'received' }],
+        error: null
+      })));
+
+      const res = await fetchBagsByStatus(mockSupabase, 'received', 'org1');
+      expect(mockSupabase.from).toHaveBeenCalledWith('bags');
+      expect(mockSupabase.eq).toHaveBeenCalledWith('status', 'received');
+      expect(mockSupabase.eq).toHaveBeenCalledWith('organization_id', 'org1');
+      expect(res).toHaveLength(1);
+    });
+  });
+
+  describe('linkBagsToBatch', () => {
+    it('should link selected bags to a batch and update status', async () => {
+      mockSupabase.then = vi.fn((cb) => Promise.resolve(cb({
+        data: [{ id: 'bag1', status: 'in_batch', batch_id: 'batch1' }],
+        error: null
+      })));
+
+      const res = await linkBagsToBatch(mockSupabase, ['bag1'], 'batch1', 'org1');
+      expect(mockSupabase.from).toHaveBeenCalledWith('bags');
+      expect(mockSupabase.update).toHaveBeenCalledWith({ status: 'in_batch', batch_id: 'batch1' });
+      expect(mockSupabase.in).toHaveBeenCalledWith('id', ['bag1']);
+      expect(mockSupabase.eq).toHaveBeenCalledWith('organization_id', 'org1');
+      expect(res).toHaveLength(1);
     });
   });
 });
