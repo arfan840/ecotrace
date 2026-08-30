@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { parseQRPayload } from '../../lib/qrGenerator';
+import { logError } from '../../lib/errors';
+import { lookupBagByBarcode, updateBagStatus, insertScanEvent } from '../../lib/api/bags';
+import { fetchActiveRouteForDriver } from '../../lib/api/routes';
+import { insertAuditLog } from '../../lib/api/auditLogs';
 
 export default function DriverScan() {
   const { supabase, user } = useAuth();
@@ -15,8 +19,11 @@ export default function DriverScan() {
   const scannerInstanceRef = useRef(null);
 
   useEffect(() => {
-    supabase.from('routes').select('*').eq('driver_id', user?.id).eq('status', 'active').single()
-      .then(({ data }) => { if (data) setActiveRoute(data); });
+    if (user?.id) {
+      fetchActiveRouteForDriver(supabase, user.id, user?.organization_id)
+        .then(data => { if (data) setActiveRoute(data); })
+        .catch(err => logError('DriverScan.fetchActiveRoute', err));
+    }
   }, [supabase, user]);
 
   const startScanner = async () => {
@@ -52,16 +59,20 @@ export default function DriverScan() {
 
   const lookupBag = async (bagId) => {
     setError(''); setScannedBag(null);
-    const { data, error: err } = await supabase.from('bags').select('*, hospitals(name, district, beds)').eq('barcode', bagId).single();
-    if (err || !data) { setError(`Bag not found: ${bagId}`); return; }
-    if (data.hospitals?.beds > 30) {
-      setError(`⚠️ HCF "${data.hospitals.name}" has ${data.hospitals.beds} beds (>30). Scanning & dispatch must be performed by the HCF staff.`);
-      return;
+    try {
+      const data = await lookupBagByBarcode(supabase, bagId, user?.organization_id);
+      if (!data) { setError(`Bag not found: ${bagId}`); return; }
+      if (data.hospitals?.beds > 30) {
+        setError(`⚠️ HCF "${data.hospitals.name}" has ${data.hospitals.beds} beds (>30). Scanning & dispatch must be performed by the HCF staff.`);
+        return;
+      }
+      if (data.status === 'collected') { setError(`Bag ${bagId} already collected.`); return; }
+      if (data.status !== 'created') { setError(`Bag ${bagId} is in status "${data.status}" — cannot collect.`); return; }
+      setScannedBag(data);
+      setStatus('');
+    } catch (err) {
+      setError(err.message);
     }
-    if (data.status === 'collected') { setError(`Bag ${bagId} already collected.`); return; }
-    if (data.status !== 'created') { setError(`Bag ${bagId} is in status "${data.status}" — cannot collect.`); return; }
-    setScannedBag(data);
-    setStatus('');
   };
 
   const handleManual = async (e) => {
@@ -80,27 +91,26 @@ export default function DriverScan() {
         gpsLng = pos.coords.longitude;
       } catch (_) {}
 
-      await supabase.from('bags').update({
-        status: 'collected',
+      await updateBagStatus(supabase, scannedBag.id, 'collected', {
         collected_at: new Date().toISOString(),
         collected_by: user?.id,
         gps_lat: gpsLat,
         gps_lng: gpsLng,
         route_id: activeRoute?.id || null,
-      }).eq('id', scannedBag.id);
+      }, user?.organization_id);
 
-      supabase.from('scan_events').insert({
+      insertScanEvent(supabase, {
         bag_id: scannedBag.id, barcode: scannedBag.barcode,
         scanned_by: user?.id, scanner_name: user?.name,
         scan_type: 'collection', gps_lat: gpsLat, gps_lng: gpsLng,
         route_id: activeRoute?.id || null,
-      }).then();
+      }).catch(err => logError('DriverScan.insertScanEvent', err));
 
-      supabase.from('audit_logs').insert({
-        user_id: user?.id, user_name: user?.name,
-        action: 'BAG_COLLECTED', entity: 'BAG', entity_id: scannedBag.id,
+      insertAuditLog(supabase, {
+        userId: user?.id, userName: user?.name,
+        action: 'BAG_COLLECTED', entity: 'BAG', entityId: scannedBag.id,
         details: `Bag ${scannedBag.barcode} collected from ${scannedBag.hospital_name}`,
-      }).then();
+      }, user?.organization_id).catch(err => logError('DriverScan.insertAuditLog', err));
 
       setStatus(`✅ Bag ${scannedBag.barcode} collected!`);
       setScannedBag(null);
