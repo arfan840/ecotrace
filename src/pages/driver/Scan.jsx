@@ -44,7 +44,7 @@ export default function DriverScan() {
             await lookupBag(bagId);
           }
         },
-        () => {}
+        () => { /* ignore */ }
       );
     } catch (err) {
       setError('Camera not available. Use manual entry below.');
@@ -53,7 +53,7 @@ export default function DriverScan() {
   };
 
   const stopScanner = async () => {
-    try { await scannerInstanceRef.current?.stop(); } catch (_) {}
+    try { await scannerInstanceRef.current?.stop(); } catch (_) { /* ignore */ }
     setScanning(false);
   };
 
@@ -89,7 +89,7 @@ export default function DriverScan() {
         const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
         gpsLat = pos.coords.latitude;
         gpsLng = pos.coords.longitude;
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
 
       await updateBagStatus(supabase, scannedBag.id, 'collected', {
         collected_at: new Date().toISOString(),

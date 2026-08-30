@@ -59,10 +59,6 @@ export default function PlantReconciliation() {
   };
 
   const missingBags = details.collected?.filter(b => !details.received?.find(r => r.id === b.id)) || [];
-  const catStats = (bags) => ['Yellow', 'Red', 'Blue', 'White'].map(cat => ({
-    cat, count: bags.filter(b => b.category === cat).length,
-    weight: bags.filter(b => b.category === cat).reduce((s, b) => s + (b.weight || 0), 0),
-  }));
 
   return (
     <div className="slide-up">
