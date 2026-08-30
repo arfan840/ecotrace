@@ -1,52 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { generateBagIds } from '../../lib/bagId';
 import QRLabel from '../../components/QRLabel';
 import PrintLabelButton, { printLabels } from '../../components/PrintLabel';
 import { fetchHospitals } from '../../lib/api/hospitals';
-import { fetchFilteredBags, createBags } from '../../lib/api/bags';
-import { fetchAuditLogsByEntity, insertAuditLog } from '../../lib/api/auditLogs';
-import { bagSchema } from '../../lib/validation/schemas';
+import { fetchAuditLogsByEntity } from '../../lib/api/auditLogs';
 import { branding } from '../../config/branding';
 import { logError } from '../../lib/errors';
+import useBagFilters from '../../hooks/useBagFilters';
+import useBagCreation from '../../hooks/useBagCreation';
 
 export default function Bags() {
   const { supabase, user } = useAuth();
-  const [data, setData] = useState({ bags: [], total: 0 });
-  const [filters, setFilters] = useState({ status: '', category: '', search: '' });
-  const [page, setPage] = useState(1);
   const [selectedBag, setSelectedBag] = useState(null);
-  const [showCreate, setShowCreate] = useState(false);
   const [hospitals, setHospitals] = useState([]);
-  const [creating, setCreating] = useState(false);
-  const [newBags, setNewBags] = useState([]); // just-created bags for preview
-  const [form, setForm] = useState({ hospital_id: '', category: 'Yellow', quantity: 1 });
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const [error, setError] = useState('');
+
+  const {
+    bags,
+    total,
+    filters,
+    setFilters,
+    page,
+    setPage,
+    refreshBags
+  } = useBagFilters(supabase, user?.organization_id);
+
+  const {
+    showCreate,
+    setShowCreate,
+    creating,
+    newBags,
+    form,
+    setForm,
+    error,
+    executeCreate,
+    resetCreation
+  } = useBagCreation();
 
   useEffect(() => {
     fetchHospitals(supabase, user?.organization_id).then(data => {
       setHospitals(data);
     }).catch(err => logError('AdminBags.fetchHospitals', err));
   }, [supabase, user]);
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const { bags, total } = await fetchFilteredBags(supabase, user?.organization_id, {
-          status: filters.status,
-          category: filters.category,
-          search: filters.search,
-          page,
-          limit: 25
-        });
-        setData({ bags, total });
-      } catch (err) {
-        logError('AdminBags.loadBags', err);
-      }
-    }
-    load();
-  }, [filters, page, supabase, user]);
 
   const handleSelectBag = async (bag) => {
     try {
@@ -59,46 +54,9 @@ export default function Bags() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    setCreating(true);
-    setError('');
-    try {
-      const hospital = hospitals.find(h => h.id === form.hospital_id);
-      if (!hospital) throw new Error(`Please select a ${branding.nomenclature.hcf}`);
-      const qty = Math.min(Math.max(1, Number(form.quantity)), 50);
-
-      const bagIds = await generateBagIds(supabase, hospital, form.category, qty);
-      const rows = bagIds.map(bid => ({
-        barcode: bid,
-        hospital_id: hospital.id,
-        hospital_name: hospital.name,
-        hcf_code: hospital.hcf_code || null,
-        district: hospital.district,
-        state: hospital.state || branding.regulatory.stateCode,
-        category: form.category,
-        status: 'created',
-      }));
-
-      // Zod Validation
-      rows.forEach(r => bagSchema.parse(r));
-
-      const inserted = await createBags(supabase, rows, user?.organization_id);
-
-      // Audit log
-      insertAuditLog(supabase, {
-        userId: user?.id,
-        userName: user?.name,
-        action: 'BAGS_CREATED',
-        entity: 'BAG',
-        details: `Created ${qty} ${form.category} bags for ${hospital.name}`
-      }, user?.organization_id).then();
-
-      setNewBags(inserted || rows);
-      setData(d => ({ ...d, total: d.total + qty })); // optimistic
-    } catch (err) {
-      setError(err.message || 'Failed to create bags');
-    } finally {
-      setCreating(false);
-    }
+    await executeCreate(supabase, user, hospitals, () => {
+      refreshBags();
+    });
   };
 
   const toggleSelect = (id) => {
@@ -109,7 +67,7 @@ export default function Bags() {
     });
   };
 
-  const selectedBagsForPrint = data.bags.filter(b => selectedIds.has(b.id));
+  const selectedBagsForPrint = bags.filter(b => selectedIds.has(b.id));
 
   return (
     <div className="slide-up">
@@ -119,7 +77,7 @@ export default function Bags() {
           {selectedIds.size > 0 && (
             <PrintLabelButton bags={selectedBagsForPrint} label={`🖨️ Print ${selectedIds.size} Labels`} className="btn btn-secondary" />
           )}
-          <button className="btn btn-primary" onClick={() => { setShowCreate(true); setNewBags([]); setError(''); }}>
+          <button className="btn btn-primary" onClick={() => { setShowCreate(true); resetCreation(); }}>
             ➕ Create Bags
           </button>
         </div>
@@ -154,11 +112,11 @@ export default function Bags() {
         <div className="data-table-wrapper">
           <table className="data-table">
             <thead><tr>
-              <th><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(data.bags.map(b => b.id)) : new Set())} /></th>
+              <th><input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? new Set(bags.map(b => b.id)) : new Set())} /></th>
               <th>Bag ID / Barcode</th><th>Hospital</th><th>Category</th><th>Weight</th><th>Status</th><th>Created</th><th>Actions</th>
             </tr></thead>
             <tbody>
-              {data.bags.map(b => (
+              {bags.map(b => (
                 <tr key={b.id}>
                   <td><input type="checkbox" checked={selectedIds.has(b.id)} onChange={() => toggleSelect(b.id)} /></td>
                   <td style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.78rem' }}>{b.barcode}</td>
@@ -178,22 +136,22 @@ export default function Bags() {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            {selectedIds.size > 0 ? `${selectedIds.size} selected · ` : ''}{data.total} total bags · Page {page} of {Math.ceil(data.total / 25) || 1}
+            {selectedIds.size > 0 ? `${selectedIds.size} selected · ` : ''}{total} total bags · Page {page} of {Math.ceil(total / 25) || 1}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-secondary btn-sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>← Prev</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setPage(p => p + 1)} disabled={page * 25 >= data.total}>Next →</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setPage(p => p + 1)} disabled={page * 25 >= total}>Next →</button>
           </div>
         </div>
       </div>
 
       {/* Create Bags Modal */}
       {showCreate && (
-        <div className="modal-overlay" onClick={() => { setShowCreate(false); setNewBags([]); setError(''); }}>
+        <div className="modal-overlay" onClick={() => { setShowCreate(false); resetCreation(); }}>
           <div className="modal-content" style={{ maxWidth: 700, width: '95vw' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>➕ Create Waste Bags</h2>
-              <button className="modal-close" onClick={() => { setShowCreate(false); setNewBags([]); setError(''); }}>×</button>
+              <button className="modal-close" onClick={() => { setShowCreate(false); resetCreation(); }}>×</button>
             </div>
 
             {error && <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: 12, marginBottom: 16, color: '#ef4444', textAlign: 'center' }}>{error}</div>}
@@ -238,7 +196,7 @@ export default function Bags() {
                   <span style={{ color: 'var(--accent-green)', fontWeight: 600 }}>✅ {newBags.length} bags created!</span>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <PrintLabelButton bags={newBags} label="🖨️ Print All Labels" className="btn btn-primary" />
-                    <button className="btn btn-secondary" onClick={() => setNewBags([])}>Create More</button>
+                    <button className="btn btn-secondary" onClick={resetCreation}>Create More</button>
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, maxHeight: 400, overflowY: 'auto', padding: 4 }}>
