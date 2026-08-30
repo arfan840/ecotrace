@@ -9,7 +9,9 @@ import { insertAuditLog } from '../../lib/api/auditLogs';
 import { queueAction } from '../../lib/offlineQueue';
 import { branding } from '../../config/branding';
 import { logError } from '../../lib/errors';
+import { isStaffOnlyScanRequired } from '../../lib/business/dispatchRules';
 import useQrScanner from '../../hooks/useQrScanner';
+
 import useBluetoothScale from '../../hooks/useBluetoothScale';
 
 export default function DriverHome() {
@@ -136,7 +138,7 @@ export default function DriverHome() {
     try {
       const data = await lookupBagByBarcode(supabase, code, user?.organization_id);
       if (!data) return showError(`Not found: ${code}`);
-      if (data.hospitals?.beds > 30) {
+      if (isStaffOnlyScanRequired(data.hospitals)) {
         return showError(`⚠️ ${branding.nomenclature.hcf} "${data.hospitals?.name}" has ${data.hospitals?.beds} beds (>30). Scanning & dispatch must be performed by the facility staff.`);
       }
       if (data.status !== 'created') return showError(`Bag already ${data.status}`);

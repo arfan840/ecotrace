@@ -5,6 +5,8 @@ import { lookupBagByBarcode, updateBagStatus } from '../../lib/api/bags';
 import { insertAuditLog } from '../../lib/api/auditLogs';
 import { queueAction } from '../../lib/offlineQueue';
 import { branding } from '../../config/branding';
+import { isStaffOnlyScanRequired } from '../../lib/business/dispatchRules';
+
 
 export default function DriverWeigh() {
   const { supabase, user } = useAuth();
@@ -21,7 +23,7 @@ export default function DriverWeigh() {
     try {
       const data = await lookupBagByBarcode(supabase, bagId, user?.organization_id);
       if (!data) { setError(`Bag not found: ${bagId}`); return; }
-      if (data.hospitals?.beds > 30) {
+      if (isStaffOnlyScanRequired(data.hospitals)) {
         setError(`⚠️ ${branding.nomenclature.hcf} "${data.hospitals?.name}" has ${data.hospitals?.beds} beds (>30). Scanning & dispatch must be performed by the facility staff.`);
         return;
       }

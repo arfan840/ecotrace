@@ -5,6 +5,8 @@ import { logError } from '../../lib/errors';
 import { lookupBagByBarcode, updateBagStatus, insertScanEvent } from '../../lib/api/bags';
 import { fetchActiveRouteForDriver } from '../../lib/api/routes';
 import { insertAuditLog } from '../../lib/api/auditLogs';
+import { isStaffOnlyScanRequired } from '../../lib/business/dispatchRules';
+
 
 export default function DriverScan() {
   const { supabase, user } = useAuth();
@@ -62,7 +64,7 @@ export default function DriverScan() {
     try {
       const data = await lookupBagByBarcode(supabase, bagId, user?.organization_id);
       if (!data) { setError(`Bag not found: ${bagId}`); return; }
-      if (data.hospitals?.beds > 30) {
+      if (isStaffOnlyScanRequired(data.hospitals)) {
         setError(`⚠️ HCF "${data.hospitals.name}" has ${data.hospitals.beds} beds (>30). Scanning & dispatch must be performed by the HCF staff.`);
         return;
       }

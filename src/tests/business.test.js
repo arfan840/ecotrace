@@ -4,6 +4,8 @@ import { parseQRPayload } from '../lib/qrGenerator';
 import { generateCertificateHTML } from '../lib/certificate';
 import { canPerform } from '../lib/auth/permissions';
 import { loginSchema, hospitalSchema, profileSchema } from '../lib/validation/schemas';
+import { isStaffOnlyScanRequired } from '../lib/business/dispatchRules';
+
 
 // DistrictCode isn't exported directly but we can test it through bagId functions or mock dates.
 describe('Bag ID Generation and Parsing', () => {
@@ -165,3 +167,18 @@ describe('Disposal Certificate Formatting', () => {
     expect(html).toContain('Disposal Certificate');
   });
 });
+
+describe('Facility Dispatch Rules', () => {
+  it('should require staff-only scan for HCFs with >30 beds', () => {
+    expect(isStaffOnlyScanRequired({ name: 'Big Hospital', beds: 31 })).toBe(true);
+    expect(isStaffOnlyScanRequired({ name: 'Limit Hospital', beds: 30 })).toBe(false);
+    expect(isStaffOnlyScanRequired({ name: 'Small Clinic', beds: 5 })).toBe(false);
+  });
+
+  it('should handle missing or malformed bed inputs safely', () => {
+    expect(isStaffOnlyScanRequired(null)).toBe(false);
+    expect(isStaffOnlyScanRequired({})).toBe(false);
+    expect(isStaffOnlyScanRequired({ beds: 'invalid' })).toBe(false);
+  });
+});
+
