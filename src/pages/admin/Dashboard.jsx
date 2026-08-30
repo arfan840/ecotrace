@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Legend } from 'recharts';
+import { logError } from '../../lib/errors';
+import { fetchAdminDashboardData } from '../../lib/api/dashboard';
 
 const COLORS = ['#fbbf24', '#f87171', '#60a5fa', '#e5e7eb'];
 const CATEGORY_COLORS = { Yellow: '#fbbf24', Red: '#f87171', Blue: '#60a5fa', White: '#94a3b8' };
 
 export default function Dashboard() {
-  const { supabase } = useAuth();
+  const { supabase, user } = useAuth();
   const [stats, setStats] = useState(null);
   const [trends, setTrends] = useState([]);
   const [reconSummary, setReconSummary] = useState(null);
@@ -14,15 +16,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function fetchData() {
-      const [{ data: bags }, { data: discs }, { data: batches }, { data: hcfs }, { count: vehicleCount }] = await Promise.all([
-        supabase.from('bags').select('*'),
-        supabase.from('discrepancies').select('*'),
-        supabase.from('batches').select('*'),
-        supabase.from('hospitals').select('id, bedded'),
-        supabase.from('vehicles').select('id', { count: 'exact', head: true }),
-      ]);
+      try {
+        const { bags, discs, batches, hcfs, vehicleCount } = await fetchAdminDashboardData(supabase, user?.organization_id);
 
-      if (bags) {
         const today = new Date().toISOString().split('T')[0];
         const created = bags.filter(b => b.status === 'created').length;
         setStats({
@@ -30,8 +26,8 @@ export default function Dashboard() {
           todayBags: bags.filter(b => b.created_at?.startsWith(today)).length,
           totalWeight: Number(bags.reduce((s, b) => s + (b.weight || 0), 0).toFixed(2)),
           pendingBags: created,
-          hcfCount: hcfs?.length || 0,
-          vehicleCount: vehicleCount || 0,
+          hcfCount: hcfs.length,
+          vehicleCount,
           byCategory: bags.reduce((acc, b) => { acc[b.category] = (acc[b.category] || 0) + 1; return acc; }, {}),
           byStatus: bags.reduce((acc, b) => { acc[b.status] = (acc[b.status] || 0) + 1; return acc; }, {}),
         });
@@ -46,13 +42,9 @@ export default function Dashboard() {
           if (tMap[d]) { tMap[d].bags++; tMap[d].weight += (b.weight || 0); }
         });
         setTrends(Object.entries(tMap).map(([k, v]) => ({ date: k, bags: v.bags, weight: Number(v.weight.toFixed(2)) })));
-      }
 
-      if (discs) {
         setReconSummary({ total: discs.length, open: discs.filter(d => d.status === 'open').length, resolved: discs.filter(d => d.status === 'resolved').length });
-      }
 
-      if (batches) {
         const treated = batches.filter(b => b.status === 'treated');
         const byType = {};
         treated.forEach(b => {
@@ -62,6 +54,8 @@ export default function Dashboard() {
           byType[bt].weight += Number((b.total_weight || 0).toFixed(2));
         });
         setTreatmentStats({ treatedBatches: treated.length, pendingBatches: batches.length - treated.length, byType });
+      } catch (err) {
+        logError('AdminDashboard.fetchData', err);
       }
     }
     fetchData();

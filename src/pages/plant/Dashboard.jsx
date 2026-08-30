@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { logError } from '../../lib/errors';
+import { fetchPlantDashboardData } from '../../lib/api/dashboard';
 
 export default function PlantDashboard() {
-  const { supabase } = useAuth();
+  const { supabase, user } = useAuth();
   const [routes, setRoutes] = useState([]);
   const [stats, setStats] = useState(null);
   const [reconSummary, setReconSummary] = useState(null);
@@ -11,22 +13,21 @@ export default function PlantDashboard() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: rData }, { data: bStats }, { data: discData }, { data: batchData }] = await Promise.all([
-        supabase.from('routes').select('*').eq('status', 'active'),
-        supabase.from('bags').select('status'),
-        supabase.from('discrepancies').select('status').eq('status', 'open'),
-        supabase.from('batches').select('*')
-      ]);
+      try {
+        const data = await fetchPlantDashboardData(supabase, user?.organization_id);
 
-      setRoutes(rData || []);
-      setBatches(batchData || []);
-      setReconSummary({ open: (discData || []).length });
-      
-      const counts = (bStats || []).reduce((acc, b) => {
-        acc[b.status] = (acc[b.status] || 0) + 1;
-        return acc;
-      }, {});
-      setStats({ byStatus: counts });
+        setRoutes(data.routes);
+        setBatches(data.batches);
+        setReconSummary({ open: data.openDiscCount });
+
+        const counts = data.bagStatuses.reduce((acc, b) => {
+          acc[b.status] = (acc[b.status] || 0) + 1;
+          return acc;
+        }, {});
+        setStats({ byStatus: counts });
+      } catch (err) {
+        logError('PlantDashboard.load', err);
+      }
     }
     load();
   }, [supabase]);
