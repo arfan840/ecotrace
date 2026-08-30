@@ -2,10 +2,13 @@
  * Data access and API module for Reconciliation Discrepancies
  */
 
-export async function fetchDiscrepancies(supabase, organizationId = null) {
+export async function fetchDiscrepancies(supabase, organizationId = null, { status } = {}) {
   let query = supabase.from('discrepancies').select('*').order('created_at', { ascending: false });
   if (organizationId) {
     query = query.eq('organization_id', organizationId);
+  }
+  if (status) {
+    query = query.eq('status', status);
   }
   const { data, error } = await query;
   if (error) throw new Error(error.message);

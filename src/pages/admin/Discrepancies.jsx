@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { logError } from '../../lib/errors';
+import { fetchDiscrepancies, resolveDiscrepancy } from '../../lib/api/discrepancies';
 
 export default function Discrepancies() {
   const { supabase, user } = useAuth();
@@ -11,29 +13,26 @@ export default function Discrepancies() {
 
   useEffect(() => {
     async function load() {
-      let q = supabase.from('discrepancies').select('*').order('created_at', { ascending: false });
-      if (statusFilter) q = q.eq('status', statusFilter);
-      const { data } = await q;
-      if (data) {
+      try {
+        const data = await fetchDiscrepancies(supabase, user?.organization_id, { status: statusFilter || null });
         setDiscrepancies(data.map(d => ({ ...d, createdAt: d.created_at })));
+      } catch (err) {
+        logError('Discrepancies.load', err);
       }
     }
     load();
-  }, [statusFilter, refresh, supabase]);
+  }, [statusFilter, refresh, supabase, user]);
 
   const handleResolve = async () => {
-    await supabase.from('discrepancies')
-      .update({ 
-        status: 'resolved', 
-        resolution, 
-        resolved_at: new Date().toISOString(),
-        resolved_by: user?.id 
-      })
-      .eq('id', resolveId);
-      
-    setResolveId(null);
-    setResolution('');
-    setRefresh(r => r + 1);
+    try {
+      await resolveDiscrepancy(supabase, resolveId, resolution, user?.id, user?.organization_id);
+      setResolveId(null);
+      setResolution('');
+      setRefresh(r => r + 1);
+    } catch (err) {
+      logError('Discrepancies.handleResolve', err);
+      alert(err.message);
+    }
   };
 
   const openCount = discrepancies.filter(d => d.status === 'open').length;
