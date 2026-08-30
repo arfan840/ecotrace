@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
 import Logo from '../components/Logo';
 import { branding } from '../config/branding';
 import { loginSchema } from '../lib/validation/schemas';
+import { logError } from '../lib/errors';
+import { lookupHospitalByCode, fetchHospitals } from '../lib/api/hospitals';
+import { createProfile } from '../lib/api/profiles';
 import { 
   isWebBluetoothSupported, 
   connectBluetoothScale, 
@@ -15,7 +17,7 @@ import {
 } from '../lib/bluetoothScale';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, supabase } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -118,16 +120,16 @@ export default function LoginPage() {
               const hcfMatch = email.match(/hcf(\d+)/i);
               if (hcfMatch) {
                 const code = `HCF${hcfMatch[1].padStart(4, '0')}`;
-                const { data: hosp } = await supabase.from('hospitals').select('id').eq('hcf_code', code).maybeSingle();
+                const hosp = await lookupHospitalByCode(supabase, code);
                 if (hosp) hospitalId = hosp.id;
               }
               if (!hospitalId) {
-                const { data: hosps } = await supabase.from('hospitals').select('id').limit(1);
+                const hosps = await fetchHospitals(supabase);
                 if (hosps && hosps.length > 0) hospitalId = hosps[0].id;
               }
             }
 
-            await supabase.from('profiles').insert({
+            await createProfile(supabase, {
                id: signupData.user.id,
                name: email.split('@')[0],
                email: email,
@@ -148,6 +150,7 @@ export default function LoginPage() {
       else navigate('/admin');
       
     } catch (err) {
+      logError('LoginPage.handleSubmit', err);
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);

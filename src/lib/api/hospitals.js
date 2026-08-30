@@ -51,3 +51,14 @@ export async function deleteHospital(supabase, id, organizationId = null) {
   if (error) throw new Error(error.message);
   return true;
 }
+
+export async function lookupHospitalByCode(supabase, code, organizationId = null) {
+  let query = supabase.from('hospitals').select('id').eq('hcf_code', code);
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId);
+  }
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
