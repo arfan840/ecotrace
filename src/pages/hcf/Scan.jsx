@@ -7,6 +7,7 @@ import useQrScanner from '../../hooks/useQrScanner';
 import useBluetoothScale from '../../hooks/useBluetoothScale';
 import { isWebBluetoothSupported } from '../../lib/bluetoothScale';
 import { lookupBagByBarcode, updateBagStatus, insertScanEvent } from '../../lib/api/bags';
+import { fetchRoutes } from '../../lib/api/routes';
 import { insertAuditLog } from '../../lib/api/auditLogs';
 
 export default function HcfScan() {
@@ -27,14 +28,12 @@ export default function HcfScan() {
 
   useEffect(() => {
     // Load active driver routes
-    supabase
-      .from('routes')
-      .select('*')
-      .eq('status', 'active')
-      .then(({ data }) => {
-        if (data) setActiveRoutes(data);
-      });
-  }, [supabase]);
+    fetchRoutes(supabase, user?.organization_id)
+      .then(routes => {
+        setActiveRoutes(routes.filter(r => r.status === 'active'));
+      })
+      .catch(err => logError('HcfScan.fetchRoutes', err));
+  }, [supabase, user]);
 
   const showSuccess = (msg) => { setStatus(msg); setError(''); setTimeout(() => setStatus(''), 4000); };
   const showError = (msg) => { setError(msg); setStatus(''); setTimeout(() => setError(''), 5000); };
@@ -113,12 +112,14 @@ export default function HcfScan() {
     setConfirming(true);
     try {
       let gpsLat = null, gpsLng = null;
-      try {
-        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
-        gpsLat = pos.coords.latitude;
-        gpsLng = pos.coords.longitude;
-      } catch (err) {
-        logError('HcfScan.geolocation', err);
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        try {
+          const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
+          gpsLat = pos.coords.latitude;
+          gpsLng = pos.coords.longitude;
+        } catch (err) {
+          logError('HcfScan.geolocation', err);
+        }
       }
 
       const selectedRoute = activeRoutes.find(r => r.id === selectedRouteId);
