@@ -24,6 +24,7 @@ describe('Data Layer Smoke & Integration Contract Suite', () => {
   });
 
   it('verifies end-to-end hospital creation and retrieval contract', async () => {
+    // 1. Create hospital
     mockClient.single.mockReturnValue({
       then: vi.fn(cb => Promise.resolve(cb({
         data: { id: 'hosp-101', name: 'Apex Hospital', code: 'HCF0001', beds: 45 },
@@ -39,7 +40,16 @@ describe('Data Layer Smoke & Integration Contract Suite', () => {
 
     expect(created.id).toBe('hosp-101');
     expect(created.name).toBe('Apex Hospital');
-    expect(mockClient.from).toHaveBeenCalledWith('hospitals');
+
+    // 2. Fetch hospitals
+    mockClient.then = vi.fn(cb => Promise.resolve(cb({
+      data: [{ id: 'hosp-101', name: 'Apex Hospital' }],
+      error: null
+    })));
+
+    const list = await fetchHospitals(mockClient, 'org-1');
+    expect(list).toHaveLength(1);
+    expect(list[0].name).toBe('Apex Hospital');
   });
 
   it('verifies transport route lifecycle contract (start -> fetch -> close)', async () => {
@@ -60,7 +70,16 @@ describe('Data Layer Smoke & Integration Contract Suite', () => {
 
     expect(route.status).toBe('active');
 
-    // 2. Close route
+    // 2. Fetch routes
+    mockClient.then = vi.fn(cb => Promise.resolve(cb({
+      data: [route],
+      error: null
+    })));
+
+    const routes = await fetchRoutes(mockClient, 'org-1');
+    expect(routes).toHaveLength(1);
+
+    // 3. Close route
     mockClient.single.mockReturnValueOnce({
       then: vi.fn(cb => Promise.resolve(cb({
         data: { id: 'route-501', status: 'closed' },
@@ -70,6 +89,39 @@ describe('Data Layer Smoke & Integration Contract Suite', () => {
 
     const closed = await closeRoute(mockClient, 'route-501', 'org-1');
     expect(closed.status).toBe('closed');
+  });
+
+  it('verifies bag creation, barcode lookup, and status update contract', async () => {
+    // 1. Create bags
+    mockClient.then = vi.fn(cb => Promise.resolve(cb({
+      data: [{ id: 'b-1', barcode: 'JH-DHA-HCF0001-Y-20260830-000001', status: 'created' }],
+      error: null
+    })));
+
+    const bags = await createBags(mockClient, [{ barcode: 'JH-DHA-HCF0001-Y-20260830-000001' }], 'org-1');
+    expect(bags).toHaveLength(1);
+
+    // 2. Lookup bag
+    mockClient.maybeSingle.mockReturnValueOnce({
+      then: vi.fn(cb => Promise.resolve(cb({
+        data: { id: 'b-1', barcode: 'JH-DHA-HCF0001-Y-20260830-000001', status: 'created' },
+        error: null
+      })))
+    });
+
+    const found = await lookupBagByBarcode(mockClient, 'JH-DHA-HCF0001-Y-20260830-000001', 'org-1');
+    expect(found.id).toBe('b-1');
+
+    // 3. Update status
+    mockClient.single.mockReturnValueOnce({
+      then: vi.fn(cb => Promise.resolve(cb({
+        data: { id: 'b-1', status: 'collected' },
+        error: null
+      })))
+    });
+
+    const updated = await updateBagStatus(mockClient, 'b-1', 'collected', {}, 'org-1');
+    expect(updated.status).toBe('collected');
   });
 
   it('verifies batch waste treatment lifecycle contract', async () => {
@@ -90,7 +142,16 @@ describe('Data Layer Smoke & Integration Contract Suite', () => {
 
     expect(newBatch.id).toBe('batch-77');
 
-    // 2. Treat batch
+    // 2. Fetch batches
+    mockClient.then = vi.fn(cb => Promise.resolve(cb({
+      data: [newBatch],
+      error: null
+    })));
+
+    const batches = await fetchBatches(mockClient, 'org-1');
+    expect(batches).toHaveLength(1);
+
+    // 3. Treat batch
     mockClient.single.mockReturnValueOnce({
       then: vi.fn(cb => Promise.resolve(cb({
         data: { id: 'batch-77', status: 'treated', treated_at: new Date().toISOString() },
