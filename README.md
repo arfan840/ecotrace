@@ -28,10 +28,20 @@ cp .env.example .env
 ```
 Fill in your project's `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` credentials.
 
-### Step C: Initialize Supabase Database
-1. Open the Supabase console SQL Editor for your project.
+### Step C: Initialize Supabase Database (Two Options)
+
+#### Option 1: Local Supabase / Postgres (No External Account Needed)
+To run fully offline or in an air-gapped test environment with zero external accounts:
+```bash
+# Launch local PostgreSQL pre-seeded with supabase_schema.sql
+docker compose up -d
+```
+The database boots up on `localhost:54322` and automatically initializes all tables, multi-tenant row level security (RLS) policies, functional triggers, and mock data.
+
+#### Option 2: Cloud Supabase Project
+1. Open the Supabase console SQL Editor for your cloud project.
 2. Paste and run the entire contents of the `supabase_schema.sql` file.
-3. This creates all tables, multi-tenant row level security (RLS) filters, functional triggers, and default mock organizations.
+3. This creates all tables, multi-tenant row level security (RLS) filters, functional triggers, and default organizations.
 
 ---
 
