@@ -5,6 +5,7 @@
 
 import { updateBagStatus } from './api/bags';
 import { insertAuditLog } from './api/auditLogs';
+import { logError } from './errors';
 
 const QUEUE_KEY = 'ecotrace_offline_queue';
 
@@ -12,7 +13,7 @@ const QUEUE_KEY = 'ecotrace_offline_queue';
 export function queueAction(actionType, payload) {
   const queue = getQueue();
   queue.push({
-    id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
+    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
     type: actionType,
     payload,
     timestamp: new Date().toISOString(),
@@ -82,7 +83,7 @@ export async function syncQueue(supabase, organizationId = null) {
           entityId: bagId,
           details: `Bag ${barcode} collected & weighed (${weight}kg) (Offline synced)`
         }, organizationId);
-      }
+      } 
       
       else if (item.type === 'BAG_WEIGHED') {
         const { bagId, barcode, weight, userId, userName } = item.payload;
@@ -103,7 +104,7 @@ export async function syncQueue(supabase, organizationId = null) {
 
       successCount++;
     } catch (err) {
-      console.error(`Failed to sync offline item: ${item.id}`, err);
+      logError('offlineQueue.syncQueue', err);
       // Keep in queue for retry later
       remaining.push(item);
     }
