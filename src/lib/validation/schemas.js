@@ -24,7 +24,7 @@ export const profileSchema = z.object({
   email: z.string().email({ message: 'Invalid email address' }),
   role: z.enum(['plant_head', 'plant_manager', 'driver', 'regulatory', 'hcf']),
   phone: z.string().optional().or(z.literal('')),
-  hospital_id: z.string().uuid().nullable().optional(),
+  hospital_id: z.string().nullable().optional(),
 });
 
 export const vehicleSchema = z.object({
