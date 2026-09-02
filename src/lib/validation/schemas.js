@@ -30,7 +30,7 @@ export const profileSchema = z.object({
 export const vehicleSchema = z.object({
   number: z.string().min(4, { message: 'Registration number is required' }),
   type: z.string().default('Van'),
-  driver_id: z.string().uuid().nullable().optional(),
+  driver_id: z.string().nullable().optional(),
   status: z.enum(['active', 'maintenance', 'inactive']).default('active'),
 });
 
